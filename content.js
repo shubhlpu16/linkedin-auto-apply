@@ -16,1591 +16,1777 @@ let totalEasyApplyJobs = 0
 let currentJobNumber = 0
 
 // Common selectors across multiple LinkedIn job-list layouts. Kept broad to
-// maximize coverage (search results, two-pane, seven-up, home module, etc.).
+// maximize coverage (search results, two-pane, seven-up, home module, collections, etc.).
 const JOB_CARD_SELECTORS = [
-	'.jobs-search-results__list li',
-	'.jobs-search__results-list li',
-	'.jobs-search-results li',
-	'.jobs-search-two-pane__results-list li',
-	'.jobs-search-seven-up__list li',
-	'.jobs-home-jobs-module__list li',
-	'.jobs-search-vertical__results-list li',
-	'.job-card-container',
-	'li.job-card-list__item',
-	'.reusable-search__result-container',
+        '.jobs-search-results__list li',
+        '.jobs-search__results-list li',
+        '.jobs-search-results li',
+        '.jobs-search-two-pane__results-list li',
+        '.jobs-search-seven-up__list li',
+        '.jobs-home-jobs-module__list li',
+        '.jobs-search-vertical__results-list li',
+        '.scaffold-layout__list-container li',
+        '.jobs-search-results-list__list-item',
+        'li.jobs-search-results__list-item',
+        'li.reusable-search__result-container',
+        'li.job-card-container',
+        'li.job-card-list__item',
+        'li.jobs-search-two-pane__job-card-container',
+        '.jobs-collection__list-item',
+        '.jobs-collections__list-item',
+        'li.scaffold-layout__list-item',
+        '.job-card-container--clickable',
+        '.reusable-search-simple-insight__container',
+        'div.job-card-container',
+        '.artdeco-list__item',
 ]
 
 // Click targets inside a job card to reliably open job details across layouts.
 const JOB_CLICK_TARGET_SELECTORS = [
-	'a.job-card-list__title',
-	'.job-card-container__link',
-	'a[href*="/jobs/view/"]',
-	'.job-card-list__title a',
-	'.result-card__full-card-link',
-	'a[data-control-name="search_srp_result"]',
+        'a.job-card-list__title',
+        '.job-card-container__link',
+        'a[href*="/jobs/view/"]',
+        '.job-card-list__title a',
+        '.result-card__full-card-link',
+        'a[data-control-name="search_srp_result"]',
 ]
 
 // forward-declare markJobStatus so callers earlier in the file won't crash
 function markJobStatus(card, status) {
-	// noop until real implementation later in the file
+        // noop until real implementation later in the file
 }
 
 // Remove any UI artifacts (timers, status labels) left behind by the script.
 function cleanupJobUI() {
-	try {
-		// remove per-job timer badges
-		const timers = document.querySelectorAll('.li-auto-apply__timer')
-		timers.forEach((t) => { try { t.remove() } catch (e) { } })
+        try {
+                // remove per-job timer badges
+                const timers = document.querySelectorAll('.li-auto-apply__timer')
+                timers.forEach((t) => { try { t.remove() } catch (e) { } })
 
-		// remove status labels
-		const labels = document.querySelectorAll('.li-auto-apply-statuslabel')
-		labels.forEach((l) => { try { l.remove() } catch (e) { } })
+                // remove status labels
+                const labels = document.querySelectorAll('.li-auto-apply-statuslabel')
+                labels.forEach((l) => { try { l.remove() } catch (e) { } })
 
-		// remove marker classes and inline backgrounds from job cards
-		const marked = document.querySelectorAll('.li-auto-apply--processing, .li-auto-apply--applied, .li-auto-apply--skipped, .li-auto-apply--stopped')
-		marked.forEach((el) => {
-			try {
-				el.classList.remove('li-auto-apply--processing', 'li-auto-apply--applied', 'li-auto-apply--skipped', 'li-auto-apply--stopped')
-				// clear inline background styles if they were set
-				el.style.backgroundColor = ''
-			} catch (e) { }
-		})
+                // remove marker classes and inline backgrounds from job cards
+                const marked = document.querySelectorAll('.li-auto-apply--processing, .li-auto-apply--applied, .li-auto-apply--skipped, .li-auto-apply--stopped')
+                marked.forEach((el) => {
+                        try {
+                                el.classList.remove('li-auto-apply--processing', 'li-auto-apply--applied', 'li-auto-apply--skipped', 'li-auto-apply--stopped')
+                                // clear inline background styles if they were set
+                                el.style.backgroundColor = ''
+                        } catch (e) { }
+                })
 
-		// clear jobCards state
-		try { jobCards = [] } catch (e) { }
-		try { jobAttempts = new Map() } catch (e) { }
-		try { processedJobs = new Set() } catch (e) { }
+                // clear jobCards state
+                try { jobCards = [] } catch (e) { }
+                try { jobAttempts = new Map() } catch (e) { }
+                try { processedJobs = new Set() } catch (e) { }
 
-		// clear any floating run badge if present
-		try { if (contentRunBadge) { contentRunBadge.remove(); contentRunBadge = null } } catch (e) { }
-		contentRunElapsed = 0
-	} catch (e) {
-		console.debug('cleanupJobUI error', e)
-	}
+                // clear any floating run badge if present
+                try { if (contentRunBadge) { contentRunBadge.remove(); contentRunBadge = null } } catch (e) { }
+                contentRunElapsed = 0
+        } catch (e) {
+                console.debug('cleanupJobUI error', e)
+        }
 }
 
-function findEasyApplyButton(card = null) {
-	// helper to create a small summary of the found element for debugging
-	const summarizeEl = (el) => {
-		if (!el) return null
-		try {
-			return {
-				tag: el.tagName,
-				text: (el.textContent || '').trim().slice(0, 120),
-				aria: el.getAttribute && el.getAttribute('aria-label'),
-				href: el.getAttribute && (el.getAttribute('href') || (el.href || null)),
-				dataControl: el.getAttribute && el.getAttribute('data-control-name'),
-				dataTest: el.getAttribute && (el.getAttribute('data-test-apply-button') !== null),
-				disabled: !!el.disabled,
-				visible: !!(el.offsetParent || (el.getClientRects && el.getClientRects().length)),
-			}
-		} catch (e) { return { tag: el.tagName } }
-	}
+function findEasyApplyButton() {
+        // CRITICAL FIX: Search GLOBALLY first (detail pane), not scoped to card
+        // The Easy Apply button appears in the right-side detail pane on modern LinkedIn
+        const summarizeEl = (el) => {
+                if (!el) return null
+                try {
+                        return {
+                                tag: el.tagName,
+                                text: (el.textContent || '').trim().slice(0, 120),
+                                aria: el.getAttribute && el.getAttribute('aria-label'),
+                                disabled: !!el.disabled,
+                                visible: !!(el.offsetParent || (el.getClientRects && el.getClientRects().length)),
+                        }
+                } catch (e) { return { tag: el.tagName } }
+        }
 
-	const debugInfo = { scope: card ? 'card' : 'page', triedSelectors: [], triedTextScan: 0, method: null, matchedSelector: null, matchedHint: null, elementSummary: null, timestamp: Date.now() }
+        const debugInfo = { scope: 'global', triedSelectors: [], method: null, matchedSelector: null, timestamp: Date.now() }
 
-	const selectors = [
-		'button.jobs-apply-button',
-		'button[aria-label*="Easy Apply"]',
-		'.jobs-apply-button--top-card button',
-		'button.jobs-apply-button--top-card',
-		'button[data-control-name*="jobdetails_topcard_in_apply"]',
-		'button[data-test-apply-button]',
-		'a[role="button"][aria-label*="Easy Apply"]',
-	]
+        // Priority selectors for detail pane (jobs/search, jobs/collections, etc.)
+        const selectors = [
+                'button.jobs-apply-button',
+                'button[data-test-global-apply-button]',
+                'button[aria-label*="Easy Apply"]',
+                '.jobs-apply-button--top-card button',
+                'button.jobs-apply-button--top-card',
+                'button[data-control-name*="jobdetails_topcard_inapply"]',
+                'button[data-control-name*="jobdetails_topcard_in_apply"]',
+                'button[data-test-apply-button]',
+                '.jobs-unified-top-card__content--two-pane button.jobs-apply-button',
+                '.jobs-details__main-content button[aria-label*="Easy Apply"]',
+                'button.artdeco-button--primary[aria-label*="Easy Apply"]',
+                'a[role="button"][aria-label*="Easy Apply"]',
+        ]
 
-	// First try scoped search inside the card (if provided), then fallback to page-wide
-	for (const selector of selectors) {
-		debugInfo.triedSelectors.push(selector)
-		const btn = card ? card.querySelector(selector) : document.querySelector(selector)
-		if (btn) {
-			debugInfo.method = 'selector'
-			debugInfo.matchedSelector = selector
-			debugInfo.elementSummary = summarizeEl(btn)
-			try { console.debug('EasyApply: found via selector', selector, debugInfo.elementSummary) } catch (e) { }
-			// expose last result for easier inspection from the console
-			try { window.__li_lastEasyApply = debugInfo } catch (e) { }
-			return btn
-		}
-	}
+        // Search globally (detail pane)
+        for (const selector of selectors) {
+                debugInfo.triedSelectors.push(selector)
+                try {
+                        const btn = document.querySelector(selector)
+                        if (btn && !btn.disabled) {
+                                debugInfo.method = 'selector'
+                                debugInfo.matchedSelector = selector
+                                debugInfo.elementSummary = summarizeEl(btn)
+                                console.log('✓ EasyApply button found:', selector)
+                                try { window.__li_lastEasyApply = debugInfo } catch (e) { }
+                                return btn
+                        }
+                } catch (e) { }
+        }
 
-	// Fallback: scan buttons for text that looks like Easy Apply / Apply
-	const buttonHints = ['easy apply', 'apply now', 'apply', 'submit application']
-	const allButtons = card ? [...card.querySelectorAll('button, a[role="button"]')] : [...document.querySelectorAll('button, a[role="button"]')]
-	debugInfo.triedTextScan = allButtons.length
-	for (const btn of allButtons) {
-		const text = (btn.textContent || btn.getAttribute('aria-label') || '').toLowerCase().trim()
-		if (!text) continue
-		const matched = buttonHints.find((h) => text.includes(h))
-		if (matched) {
-			debugInfo.method = 'text'
-			debugInfo.matchedHint = matched
-			debugInfo.elementSummary = summarizeEl(btn)
-			try { console.debug('EasyApply: found via text match', matched, debugInfo.elementSummary) } catch (e) { }
-			try { window.__li_lastEasyApply = debugInfo } catch (e) { }
-			return btn
-		}
-	}
+        // Fallback: text-based search in all visible buttons
+        const buttonHints = ['easy apply']
+        try {
+                const allButtons = [...document.querySelectorAll('button, a[role="button"]')]
+                for (const btn of allButtons) {
+                        if (btn.disabled) continue
+                        const text = (btn.textContent || btn.getAttribute('aria-label') || '').toLowerCase().trim()
+                        if (!text) continue
+                        const matched = buttonHints.find((h) => text === h || text.startsWith(h))
+                        if (matched) {
+                                debugInfo.method = 'text'
+                                debugInfo.elementSummary = summarizeEl(btn)
+                                console.log('✓ EasyApply button found via text:', matched)
+                                try { window.__li_lastEasyApply = debugInfo } catch (e) { }
+                                return btn
+                        }
+                }
+        } catch (e) { }
 
-	// final fallback: any clickable element inside card (or page) that navigates to /jobs/view/
-	const anchors = card ? card.querySelectorAll('a[href*="/jobs/view/"]') : document.querySelectorAll('a[href*="/jobs/view/"]')
-	if (anchors.length) {
-		const a = anchors[0]
-		debugInfo.method = 'anchor'
-		debugInfo.elementSummary = summarizeEl(a)
-		try { console.debug('EasyApply: fallback using jobs/view anchor', debugInfo.elementSummary) } catch (e) { }
-		try { window.__li_lastEasyApply = debugInfo } catch (e) { }
-		return a
-	}
-
-	// expose negative result too
-	try { window.__li_lastEasyApply = debugInfo } catch (e) { }
-	try { console.debug('EasyApply: no candidate found (scoped search)', debugInfo) } catch (e) { }
-	return null
+        // Not found
+        console.log('✗ No Easy Apply button found')
+        try { window.__li_lastEasyApply = debugInfo } catch (e) { }
+        return null
 }
 
 // Start processing helpers: collect job cards and iterate sequentially
 async function startProcessing() {
-	console.log('🚀 Starting auto-apply...')
-	processedJobs = new Set()
-	currentJobIndex = 0
-	currentPage = 1
-	limitNotified = false
-	await pushStatsUpdate({ isRunning: true })
-	await randomDelay()
-	await autoScrollJobsList()
-	await collectJobCards()
-	await processNextJob()
+        console.log('🚀 Starting auto-apply...')
+        processedJobs = new Set()
+        currentJobIndex = 0
+        currentPage = 1
+        currentJobNumber = 0
+        limitNotified = false
+        await pushStatsUpdate({ isRunning: true })
+        await randomDelay()
+        await autoScrollJobsList()
+        await collectJobCards()
+        
+        // Count Easy Apply jobs and show toast if none found
+        totalEasyApplyJobs = await countEasyApplyJobs()
+        console.log(`📊 Found ${totalEasyApplyJobs} Easy Apply jobs out of ${jobCards.length} total jobs`)
+        
+        if (totalEasyApplyJobs === 0) {
+                showToast('⚠️ No Easy Apply jobs found. Stopping auto-apply.', 'error')
+                isRunning = false
+                await pushStatsUpdate({ isRunning: false })
+                return
+        }
+        
+        showToast(`🚀 Starting auto-apply on ${totalEasyApplyJobs} Easy Apply jobs`, 'success')
+        await processNextJob()
 }
 
 async function collectJobCards() {
-	const seenElements = new Set()
-	const seenJobIds = new Set()
-	const collected = []
+        const seenElements = new Set()
+        const seenJobIds = new Set()
+        const collected = []
 
-	for (const selector of JOB_CARD_SELECTORS) {
-		const nodes = document.querySelectorAll(selector)
-		if (!nodes?.length) continue
-		nodes.forEach((node) => {
-			if (seenElements.has(node)) return
-			seenElements.add(node)
-			const jobId = getJobIdFromElement(node)
-			if (!jobId || processedJobs.has(jobId) || seenJobIds.has(jobId)) return
-			if (jobCardHasDisqualifier(node)) return
-			node.dataset.liAutoApplyJobId = jobId
-			seenJobIds.add(jobId)
-			collected.push(node)
-		})
-	}
+        for (const selector of JOB_CARD_SELECTORS) {
+                const nodes = document.querySelectorAll(selector)
+                if (!nodes?.length) continue
+                nodes.forEach((node) => {
+                        if (seenElements.has(node)) return
+                        seenElements.add(node)
+                        const jobId = getJobIdFromElement(node)
+                        if (!jobId || processedJobs.has(jobId) || seenJobIds.has(jobId)) return
+                        if (jobCardHasDisqualifier(node)) return
+                        node.dataset.liAutoApplyJobId = jobId
+                        seenJobIds.add(jobId)
+                        collected.push(node)
+                })
+        }
 
-	jobCards = collected
-	console.log(`📄 Found ${jobCards.length} eligible jobs on page ${currentPage}`)
+        jobCards = collected
+        console.log(`📄 Found ${jobCards.length} eligible jobs on page ${currentPage}`)
 }
 
 // Show a dismissible countdown before moving to next job. Resolves when timer
 // elapses or when user clicks Skip. Returns a promise.
 function showNextJobCountdown(seconds = 30) {
-	return new Promise((resolve) => {
-		try {
-			// if an overlay already exists, remove it
-			const existing = document.getElementById('li-auto-apply-next-countdown')
-			if (existing) try { existing.remove() } catch (e) { }
+        return new Promise((resolve) => {
+                try {
+                        // if an overlay already exists, remove it
+                        const existing = document.getElementById('li-auto-apply-next-countdown')
+                        if (existing) try { existing.remove() } catch (e) { }
 
-			const overlay = document.createElement('div')
-			overlay.id = 'li-auto-apply-next-countdown'
-			overlay.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:rgba(0,0,0,0.75);color:#fff;padding:12px 16px;border-radius:8px;z-index:999999;font-weight:600;display:flex;align-items:center;gap:12px;'
-			const text = document.createElement('span')
-			text.textContent = `Next job in ${seconds}s`
-			const skipBtn = document.createElement('button')
-			skipBtn.textContent = 'Skip waiting'
-			skipBtn.style.cssText = 'background:#ef4444;color:#fff;border:none;padding:6px 10px;border-radius:6px;cursor:pointer;font-weight:700'
+                        const overlay = document.createElement('div')
+                        overlay.id = 'li-auto-apply-next-countdown'
+                        overlay.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:rgba(0,0,0,0.75);color:#fff;padding:12px 16px;border-radius:8px;z-index:999999;font-weight:600;display:flex;align-items:center;gap:12px;'
+                        const text = document.createElement('span')
+                        text.textContent = `Next job in ${seconds}s`
+                        const skipBtn = document.createElement('button')
+                        skipBtn.textContent = 'Skip waiting'
+                        skipBtn.style.cssText = 'background:#ef4444;color:#fff;border:none;padding:6px 10px;border-radius:6px;cursor:pointer;font-weight:700'
 
-			overlay.appendChild(text)
-			overlay.appendChild(skipBtn)
-			document.body.appendChild(overlay)
+                        overlay.appendChild(text)
+                        overlay.appendChild(skipBtn)
+                        document.body.appendChild(overlay)
 
-			let remaining = seconds
-			const id = setInterval(() => {
-				remaining -= 1
-				text.textContent = `Next job in ${remaining}s`
-				if (remaining <= 0) {
-					clearInterval(id)
-					try { overlay.remove() } catch (e) { }
-					resolve('timeout')
-				}
-			}, 1000)
+                        let remaining = seconds
+                        const id = setInterval(() => {
+                                remaining -= 1
+                                text.textContent = `Next job in ${remaining}s`
+                                if (remaining <= 0) {
+                                        clearInterval(id)
+                                        try { overlay.remove() } catch (e) { }
+                                        resolve('timeout')
+                                }
+                        }, 1000)
 
-			const onSkip = () => {
-				try { clearInterval(id) } catch (e) { }
-				try { overlay.remove() } catch (e) { }
-				resolve('skipped')
-			}
-			skipBtn.addEventListener('click', onSkip)
-		} catch (e) {
-			console.debug('showNextJobCountdown error', e)
-			resolve('error')
-		}
-	})
+                        const onSkip = () => {
+                                try { clearInterval(id) } catch (e) { }
+                                try { overlay.remove() } catch (e) { }
+                                resolve('skipped')
+                        }
+                        skipBtn.addEventListener('click', onSkip)
+                } catch (e) {
+                        console.debug('showNextJobCountdown error', e)
+                        resolve('error')
+                }
+        })
 }
 
 async function processNextJob() {
-	if (!isRunning) return console.log('⏹️ Process stopped')
+        if (!isRunning) return console.log('⏹️ Process stopped')
 
-	// End of current page
-	if (currentJobIndex >= jobCards.length) {
-		console.log(`✅ Completed page ${currentPage}, moving to next...`)
-		const nextBtn = document.querySelector(
-			'button[aria-label="Next"], button.artdeco-pagination__button--next',
-		)
-		if (nextBtn && !nextBtn.disabled) {
-			nextBtn.click()
-			currentPage++
-			await randomDelay(4000, 6000)
-			await autoScrollJobsList()
-			await collectJobCards()
-			currentJobIndex = 0
-			return processNextJob()
-		}
-		console.log('🎉 All pages processed.')
-		isRunning = false
-		await pushStatsUpdate({ isRunning: false })
-		stopContentRunTimer()
-		return
-	}
+        // End of current page
+        if (currentJobIndex >= jobCards.length) {
+                console.log(`✅ Completed page ${currentPage}, moving to next...`)
+                const nextBtn = document.querySelector(
+                        'button[aria-label="Next"], button.artdeco-pagination__button--next',
+                )
+                if (nextBtn && !nextBtn.disabled) {
+                        nextBtn.click()
+                        currentPage++
+                        await randomDelay(4000, 6000)
+                        await autoScrollJobsList()
+                        await collectJobCards()
+                        currentJobIndex = 0
+                        return processNextJob()
+                }
+                console.log('🎉 All pages processed.')
+                isRunning = false
+                await pushStatsUpdate({ isRunning: false })
+                stopContentRunTimer()
+                return
+        }
 
-	if (currentJobIndex > 0 && currentJobIndex % 5 === 0) {
-		await autoScrollJobsList()
-		await collectJobCards()
-		currentJobIndex = 0
-	}
+        if (currentJobIndex > 0 && currentJobIndex % 5 === 0) {
+                await autoScrollJobsList()
+                await collectJobCards()
+                currentJobIndex = 0
+        }
 
-	const jobCard = jobCards[currentJobIndex++]
-	const jobId = getJobIdFromElement(jobCard)
+        const jobCard = jobCards[currentJobIndex++]
+        const jobId = getJobIdFromElement(jobCard)
 
-	if (!jobId || processedJobs.has(jobId)) return isRunning ? processNextJob() : undefined
+        if (!jobId || processedJobs.has(jobId)) return isRunning ? processNextJob() : undefined
 
-	// Track attempts per job and avoid infinite retries
-	const attempts = jobAttempts.get(jobId) || 0
-	if (attempts >= 3) {
-		console.log(`⚠️ Job ${jobId} exceeded attempt limit, skipping`)
-		processedJobs.add(jobId)
-		await incrementSkipped()
-		return isRunning ? processNextJob() : undefined
-	}
-	jobAttempts.set(jobId, attempts + 1)
+        // Track attempts per job and avoid infinite retries
+        const attempts = jobAttempts.get(jobId) || 0
+        if (attempts >= 3) {
+                console.log(`⚠️ Job ${jobId} exceeded attempt limit, skipping`)
+                processedJobs.add(jobId)
+                await incrementSkipped()
+                return isRunning ? processNextJob() : undefined
+        }
+        jobAttempts.set(jobId, attempts + 1)
 
-	jobCard.scrollIntoView({ behavior: 'smooth', block: 'center' })
-	// mark visually as processing
-	markJobStatus(jobCard, 'processing')
-	const jobTimer = attachTimerToJob(jobCard, perJobTimeoutSeconds, async () => {
-		console.log(`⏱️ Job ${jobId} timed out, skipping`)
-		// ensure modal closed and mark skipped
-		closeModal()
-		processedJobs.add(jobId)
-		await incrementSkipped()
-		jobTimer.clear()
-		if (isRunning) processNextJob()
-	})
-	await openJobCard(jobCard)
-	console.log(`🧾 Opening job ${jobId}`)
-	await randomDelay(2500, 4000)
+        jobCard.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        // mark visually as processing
+        markJobStatus(jobCard, 'processing')
+        const jobTimer = attachTimerToJob(jobCard, perJobTimeoutSeconds, async () => {
+                console.log(`⏱️ Job ${jobId} timed out, skipping`)
+                // ensure modal closed and mark skipped
+                closeModal()
+                processedJobs.add(jobId)
+                await incrementSkipped()
+                jobTimer.clear()
+                if (isRunning) processNextJob()
+        })
+        await openJobCard(jobCard)
+        console.log(`🧾 Opening job ${jobId}`)
+        await randomDelay(2500, 4000)
 
-	// Skip if job is already applied
-	if (isAlreadyApplied(jobCard)) {
-		console.log(`⏭️ Skipping already applied job ${jobId}`)
-		processedJobs.add(jobId)
-		markJobStatus(jobCard, 'applied')
-		await incrementSkipped()
-		return isRunning ? processNextJob() : undefined
-	}
+        // Skip if job is already applied
+        if (isAlreadyApplied(jobCard)) {
+                console.log(`⏭️ Skipping already applied job ${jobId}`)
+                processedJobs.add(jobId)
+                markJobStatus(jobCard, 'applied')
+                await incrementSkipped()
+                return isRunning ? processNextJob() : undefined
+        }
 
-	// find Easy Apply within this card scope
-	const easyApplyButton = findEasyApplyButton(jobCard)
-	if (!easyApplyButton) {
-		console.log(`🚫 No Easy Apply found for job ${jobId}`)
-		processedJobs.add(jobId)
-		markJobStatus(jobCard, 'skipped')
-		await incrementSkipped()
-		return isRunning ? processNextJob() : undefined
-	}
+        // Wait for detail pane to load, then find Easy Apply button GLOBALLY
+        await randomDelay(1000, 1500)
+        const easyApplyButton = findEasyApplyButton()
+        if (!easyApplyButton) {
+                console.log(`🚫 No Easy Apply found for job ${jobId}`)
+                processedJobs.add(jobId)
+                markJobStatus(jobCard, 'skipped')
+                await incrementSkipped()
+                return isRunning ? processNextJob() : undefined
+        }
 
-	console.log(`🪄 Applying to job ${jobId}`)
-	try { triggerClick(easyApplyButton) } catch (e) { try { easyApplyButton.click() } catch (e2) { console.debug('click failed', e2) } }
-	await randomDelay(2000, 3500)
+        // Update progress counter
+        currentJobNumber++
+        const progressMsg = totalEasyApplyJobs > 0 ? `[${currentJobNumber}/${totalEasyApplyJobs}]` : `[${currentJobNumber}]`
+        console.log(`🪄 ${progressMsg} Applying to job ${jobId}`)
+        showProgressToast(currentJobNumber, totalEasyApplyJobs)
+        try { triggerClick(easyApplyButton) } catch (e) { try { easyApplyButton.click() } catch (e2) { console.debug('click failed', e2) } }
+        await randomDelay(2000, 3500)
 
-	// Ensure the Easy Apply modal actually opened
-	const modalCheck = await waitForSelector('.jobs-easy-apply-modal, [role="dialog"], .jobs-details__main-content, button.jobs-apply-button, button[data-test-apply-button]', 4000)
-	if (!modalCheck) {
-		console.log(`⚠️ Easy Apply modal did not appear for job ${jobId}, skipping`)
-		processedJobs.add(jobId)
-		markJobStatus(jobCard, 'skipped')
-		await incrementSkipped()
-		return isRunning ? processNextJob() : undefined
-	}
+        // Ensure the Easy Apply modal actually opened
+        const modalCheck = await waitForSelector('.jobs-easy-apply-modal, [role="dialog"], .jobs-details__main-content, button.jobs-apply-button, button[data-test-apply-button]', 4000)
+        if (!modalCheck) {
+                console.log(`⚠️ Easy Apply modal did not appear for job ${jobId}, skipping`)
+                processedJobs.add(jobId)
+                markJobStatus(jobCard, 'skipped')
+                await incrementSkipped()
+                return isRunning ? processNextJob() : undefined
+        }
 
-	const result = await fillApplicationForm()
-	// clear processing visual/timer
-	try {
-		if (jobTimer && jobTimer.clear) jobTimer.clear()
-	} catch (e) { }
+        const result = await fillApplicationForm()
+        // clear processing visual/timer
+        try {
+                if (jobTimer && jobTimer.clear) jobTimer.clear()
+        } catch (e) { }
 
-	if (result === 'applied') {
-		// Do extra verification to ensure the apply actually succeeded (toast or card change)
-		let confirmed = false
-		try {
-			confirmed = await verifyApplySuccess(jobCard, 20000)
-		} catch (e) { console.debug('verifyApplySuccess failed', e) }
-		if (confirmed) {
-			processedJobs.add(jobId)
-			markJobStatus(jobCard, 'applied')
-			try { await incrementApplied() } catch (e) { console.debug('incrementApplied failed', e) }
-			// Show 30s countdown with Skip button to let user confirm/close Done modal
-			try {
-				const choice = await showNextJobCountdown(30)
-				console.log('Next-job countdown result:', choice)
-			} catch (e) { console.debug('countdown failed', e) }
-		} else {
-			console.log(`⚠️ Could not verify apply success for job ${jobId}, marking as failed`)
-			processedJobs.add(jobId)
-			markJobStatus(jobCard, 'failed')
-			try { await incrementFailed() } catch (e) { console.debug('incrementFailed failed', e) }
-		}
+        if (result === 'applied') {
+                // Do extra verification to ensure the apply actually succeeded (toast or card change)
+                let confirmed = false
+                try {
+                        confirmed = await verifyApplySuccess(jobCard, 20000)
+                } catch (e) { console.debug('verifyApplySuccess failed', e) }
+                if (confirmed) {
+                        processedJobs.add(jobId)
+                        markJobStatus(jobCard, 'applied')
+                        try { await incrementApplied() } catch (e) { console.debug('incrementApplied failed', e) }
+                        // Show 30s countdown with Skip button to let user confirm/close Done modal
+                        try {
+                                const choice = await showNextJobCountdown(30)
+                                console.log('Next-job countdown result:', choice)
+                        } catch (e) { console.debug('countdown failed', e) }
+                } else {
+                        console.log(`⚠️ Could not verify apply success for job ${jobId}, marking as failed`)
+                        processedJobs.add(jobId)
+                        markJobStatus(jobCard, 'failed')
+                        try { await incrementFailed() } catch (e) { console.debug('incrementFailed failed', e) }
+                }
 
-	} else if (result === 'skipped') {
-		processedJobs.add(jobId)
-		markJobStatus(jobCard, 'skipped')
-	} else if (result === 'stopped') {
-		markJobStatus(jobCard, 'stopped')
-		return
-	} else if (result === 'failed') {
-		processedJobs.add(jobId)
-		markJobStatus(jobCard, 'failed')
-		try { await incrementFailed() } catch (e) { console.debug('incrementFailed failed', e) }
-	}
+        } else if (result === 'skipped') {
+                processedJobs.add(jobId)
+                markJobStatus(jobCard, 'skipped')
+        } else if (result === 'stopped') {
+                markJobStatus(jobCard, 'stopped')
+                return
+        } else if (result === 'failed') {
+                processedJobs.add(jobId)
+                markJobStatus(jobCard, 'failed')
+                try { await incrementFailed() } catch (e) { console.debug('incrementFailed failed', e) }
+        }
 
-	if (!isRunning) return
-	await randomDelay(1500, 3000)
-	await processNextJob()
+        if (!isRunning) return
+        await randomDelay(1500, 3000)
+        await processNextJob()
 }
 
 // After submit/modal-close, do extra checks to robustly detect a successful apply.
-// We poll the job card text and toast messages for success indicators.
+// IMPROVED: Check unified top card, detail pane, toasts, and confirmation modals
 async function verifyApplySuccess(jobCard, timeoutMs = 20000) {
-	const end = Date.now() + Math.max(0, timeoutMs)
-	const successPhrases = ['applied', 'submitted', 'application submitted', 'in progress']
-	const toastSelectors = ['.artdeco-toast-item--success', '.artdeco-toast-item__message']
+        const end = Date.now() + Math.max(0, timeoutMs)
+        const successPhrases = ['applied', 'submitted', 'application submitted', 'application sent', 'in progress']
+        const toastSelectors = ['.artdeco-toast-item--success', '.artdeco-toast-item__message', '.artdeco-toast-item']
+        
+        let modalClosedAt = null
+        
+        while (Date.now() <= end) {
+                try {
+                        // 1) Check for success toast messages
+                        for (const sel of toastSelectors) {
+                                const t = document.querySelector(sel)
+                                if (t && t.textContent) {
+                                        const txt = t.textContent.toLowerCase()
+                                        if (successPhrases.some((p) => txt.includes(p))) {
+                                                console.log('✓ Apply verified via toast')
+                                                return true
+                                        }
+                                }
+                        }
 
-	while (Date.now() <= end) {
-		try {
-			// 1) Check for success toast messages
-			for (const sel of toastSelectors) {
-				const t = document.querySelector(sel)
-				if (t && t.textContent) {
-					const txt = t.textContent.toLowerCase()
-					if (successPhrases.some((p) => txt.includes(p))) return true
-				}
-			}
+                        // 2) Check unified top card apply result (modern LinkedIn)
+                        const applyResult = document.querySelector('.jobs-unified-top-card__apply-result, .jobs-unified-top-card__subtitle-secondary-grouping')
+                        if (applyResult && applyResult.textContent) {
+                                const txt = applyResult.textContent.toLowerCase()
+                                if (successPhrases.some((p) => txt.includes(p))) {
+                                        console.log('✓ Apply verified via unified top card')
+                                        return true
+                                }
+                        }
 
-			// 2) Check the job card text for applied-like words
-			if (jobCard && jobCard.innerText) {
-				const txt = jobCard.innerText.toLowerCase()
-				if (successPhrases.some((p) => txt.includes(p))) return true
-			}
+                        // 3) Check confirmation dialog/modal
+                        const confirmDialog = document.querySelector('[role="dialog"] [data-test-modal-id="application-sent-confirmation"]')
+                        const confirmText = document.querySelector('[aria-label*="Application sent"]')
+                        if (confirmDialog || confirmText) {
+                                console.log('✓ Apply verified via confirmation dialog')
+                                return true
+                        }
 
-			// 3) if modal is gone and we see no error toasts, that may still indicate success
-			const modal = getApplyModal()
-			if (!modal) {
-				// no modal: as a conservative check, if a recent success toast existed earlier,
-				// we'd have returned; otherwise wait a short bit more before concluding failure
-				return false
-			}
-		} catch (e) {
-			console.debug('verifyApplySuccess error', e)
-		}
-		await new Promise((r) => setTimeout(r, 400))
-	}
-	return false
+                        // 4) Check the job card text for applied-like words
+                        if (jobCard && jobCard.innerText) {
+                                const txt = jobCard.innerText.toLowerCase()
+                                if (successPhrases.some((p) => txt.includes(p))) {
+                                        console.log('✓ Apply verified via job card text')
+                                        return true
+                                }
+                        }
+
+                        // 5) Check if Easy Apply button changed to "Applied"
+                        const appliedBtn = document.querySelector('button[aria-label*="Applied"], .jobs-apply-button--applied')
+                        if (appliedBtn) {
+                                console.log('✓ Apply verified via button state')
+                                return true
+                        }
+
+                        // 6) Track when modal closes
+                        const modal = getApplyModal()
+                        if (!modal && !modalClosedAt) {
+                                modalClosedAt = Date.now()
+                        }
+                        
+                        // If modal has been closed for >2 seconds and no errors, assume success
+                        if (modalClosedAt && (Date.now() - modalClosedAt > 2000)) {
+                                const errorToast = document.querySelector('.artdeco-toast-item--error')
+                                if (!errorToast) {
+                                        console.log('✓ Apply verified via modal close without errors')
+                                        return true
+                                }
+                                console.log('✗ Error toast detected, apply failed')
+                                return false
+                        }
+                } catch (e) {
+                        console.debug('verifyApplySuccess error', e)
+                }
+                await new Promise((r) => setTimeout(r, 400))
+        }
+        console.log('✗ Apply verification timed out')
+        return false
 }
 
 function isAlreadyApplied(jobCard) {
-	const text = jobCard.innerText.toLowerCase()
-	return (
-		text.includes('applied') ||
-		text.includes('no longer') ||
-		text.includes('promoted') ||
-		text.includes('submitted') ||
-		text.includes('in progress')
-	)
+        try {
+                const text = (jobCard.innerText || '').toLowerCase()
+                
+                // Check job card text
+                if (text.includes('applied') || 
+                    text.includes('application submitted') ||
+                    text.includes('no longer') ||
+                    text.includes('in progress')) {
+                        return true
+                }
+                
+                // Check detail pane for applied status
+                const detailPane = document.querySelector('.jobs-unified-top-card, .jobs-details__main-content')
+                if (detailPane) {
+                        const detailText = (detailPane.innerText || '').toLowerCase()
+                        if (detailText.includes('applied') || 
+                            detailText.includes('application sent') ||
+                            detailText.includes('application submitted')) {
+                                return true
+                        }
+                }
+                
+                // Check for "Applied" button state
+                const appliedBtn = document.querySelector('button[aria-label*="Applied"]')
+                if (appliedBtn) return true
+                
+                return false
+        } catch (e) {
+                console.debug('isAlreadyApplied error', e)
+                return false
+        }
 }
 
 async function fillApplicationForm() {
-	let attempts = 0
-	while (attempts < 25 && isRunning) {
-		let modal = getApplyModal()
-		if (!modal) {
-			await randomDelay(500, 1000)
-			modal = getApplyModal()
-			if (!modal) return 'skipped'
-		}
+        let attempts = 0
+        while (attempts < 25 && isRunning) {
+                let modal = getApplyModal()
+                if (!modal) {
+                        await randomDelay(500, 1000)
+                        modal = getApplyModal()
+                        if (!modal) return 'skipped'
+                }
 
-		await fillFormFields(modal)
-		await randomDelay(1200, 2000)
+                await fillFormFields(modal)
+                await randomDelay(1200, 2000)
 
-		if (detectLinkedInLimit()) {
-			await handleLinkedInLimit()
-			closeModal()
-			return 'stopped'
-		}
+                if (detectLinkedInLimit()) {
+                        await handleLinkedInLimit()
+                        closeModal()
+                        return 'stopped'
+                }
 
-		modal = getApplyModal()
-		if (!modal) {
-			console.log('✅ Application submitted!')
-			return 'applied'
-		}
+                modal = getApplyModal()
+                if (!modal) {
+                        console.log('✅ Application submitted!')
+                        return 'applied'
+                }
 
-		const outcome = await attemptModalProgress(modal)
-		if (outcome === 'submitted') return 'applied'
-		if (outcome === 'stopped') return 'stopped'
-		if (outcome === 'manualPause') {
-			const decision = await waitForManualInput(MANUAL_REVIEW_SECONDS)
-			if (decision === 'skip') {
-				console.log('⏭️ Job skipped by user during manual review.')
-				await incrementSkipped()
-				closeModal()
-				return 'skipped'
-			}
-			if (decision !== 'resume') {
-				console.log('⚠️ Manual review cancelled, skipping job.')
-				if (isRunning) await incrementSkipped()
-				closeModal()
-				return 'skipped'
-			}
-		}
-		if (outcome === 'advance' || outcome === 'waiting') {
-			await randomDelay(800, 1200)
-		}
-		attempts++
-	}
+                const outcome = await attemptModalProgress(modal)
+                if (outcome === 'submitted') return 'applied'
+                if (outcome === 'stopped') return 'stopped'
+                if (outcome === 'manualPause') {
+                        const decision = await waitForManualInput(MANUAL_REVIEW_SECONDS)
+                        if (decision === 'skip') {
+                                console.log('⏭️ Job skipped by user during manual review.')
+                                await incrementSkipped()
+                                closeModal()
+                                return 'skipped'
+                        }
+                        if (decision !== 'resume') {
+                                console.log('⚠️ Manual review cancelled, skipping job.')
+                                if (isRunning) await incrementSkipped()
+                                closeModal()
+                                return 'skipped'
+                        }
+                }
+                if (outcome === 'advance' || outcome === 'waiting') {
+                        await randomDelay(800, 1200)
+                }
+                attempts++
+        }
 
-	console.log('⚠️ Could not complete form, skipping')
-	// treat inability to complete the form after retries as a failure (attempted but failed)
-	try { await incrementFailed() } catch (e) { console.debug('incrementFailed failed', e) }
-	closeModal()
-	return 'failed'
+        console.log('⚠️ Could not complete form, skipping')
+        // treat inability to complete the form after retries as a failure (attempted but failed)
+        try { await incrementFailed() } catch (e) { console.debug('incrementFailed failed', e) }
+        closeModal()
+        return 'failed'
 }
 
 async function attemptModalProgress(modal) {
-	if (hasUnansweredRequired(modal)) {
-		return 'manualPause'
-	}
-	const submitBtn = findButton(modal, ['Submit application', 'Submit'])
-	if (submitBtn) {
-		if (submitBtn.disabled) return 'manualPause'
-		submitBtn.click()
-		const result = await evaluateAfterClick({ allowContinue: false })
-		return result
-	}
+        if (hasUnansweredRequired(modal)) {
+                return 'manualPause'
+        }
+        const submitBtn = findButton(modal, ['Submit application', 'Submit'])
+        if (submitBtn) {
+                if (submitBtn.disabled) return 'manualPause'
+                submitBtn.click()
+                const result = await evaluateAfterClick({ allowContinue: false })
+                return result
+        }
 
-	const nextBtn = findButton(modal, ['Next', 'Review', 'Continue'])
-	if (nextBtn) {
-		if (nextBtn.disabled) return 'manualPause'
-		nextBtn.click()
-		const result = await evaluateAfterClick({ allowContinue: true })
-		return result
-	}
+        const nextBtn = findButton(modal, ['Next', 'Review', 'Continue'])
+        if (nextBtn) {
+                if (nextBtn.disabled) return 'manualPause'
+                nextBtn.click()
+                const result = await evaluateAfterClick({ allowContinue: true })
+                return result
+        }
 
-	if (detectLinkedInLimit()) {
-		await handleLinkedInLimit()
-		closeModal()
-		return 'stopped'
-	}
+        if (detectLinkedInLimit()) {
+                await handleLinkedInLimit()
+                closeModal()
+                return 'stopped'
+        }
 
-	if (hasBlockingErrors(modal) || hasUnansweredRequired(modal)) {
-		return 'manualPause'
-	}
+        if (hasBlockingErrors(modal) || hasUnansweredRequired(modal)) {
+                return 'manualPause'
+        }
 
-	return 'waiting'
+        return 'waiting'
 }
 
 async function evaluateAfterClick({ allowContinue = false } = {}) {
-	await randomDelay(1500, 2500)
-	if (detectLinkedInLimit()) {
-		await handleLinkedInLimit()
-		closeModal()
-		return 'stopped'
-	}
-	const modal = getApplyModal()
-	if (!modal) {
-		console.log('✅ Application submitted!')
-		await randomDelay(1500, 2500)
-		return 'submitted'
-	}
+        await randomDelay(1500, 2500)
+        if (detectLinkedInLimit()) {
+                await handleLinkedInLimit()
+                closeModal()
+                return 'stopped'
+        }
+        const modal = getApplyModal()
+        if (!modal) {
+                console.log('✅ Application submitted!')
+                await randomDelay(1500, 2500)
+                return 'submitted'
+        }
 
-	// If a confirmation / "Done" style button is shown in the modal, wait up to
-	// 10 seconds for the modal to be closed (user may click Done). If it doesn't
-	// close in time, treat as skipped and move on.
-	try {
-		const doneLike = [...modal.querySelectorAll('button')].find((b) => {
-			const t = (b.textContent || '').toLowerCase()
-			return /done|close|dismiss|finish|got it|all done|completed|finished/.test(t)
-		})
-		if (doneLike) {
-			const closed = await waitForModalClose(10)
-			if (closed) {
-				console.log('✅ Confirmation detected and modal closed')
-				await randomDelay(1500, 2500)
-				return 'submitted'
-			}
-			// timed out waiting for a confirmation/done click — treat as a failed submit
-			console.log('⏱️ Confirmation not clicked within 10s, marking as failed')
-			return 'failed'
-		}
-	} catch (e) {
-		console.debug('Error checking for done-like button:', e)
-	}
-	if (hasBlockingErrors(modal) || hasUnansweredRequired(modal)) {
-		return 'manualPause'
-	}
-	return allowContinue ? 'advance' : 'waiting'
+        // If a confirmation / "Done" style button is shown in the modal, wait up to
+        // 10 seconds for the modal to be closed (user may click Done). If it doesn't
+        // close in time, treat as skipped and move on.
+        try {
+                const doneLike = [...modal.querySelectorAll('button')].find((b) => {
+                        const t = (b.textContent || '').toLowerCase()
+                        return /done|close|dismiss|finish|got it|all done|completed|finished/.test(t)
+                })
+                if (doneLike) {
+                        const closed = await waitForModalClose(10)
+                        if (closed) {
+                                console.log('✅ Confirmation detected and modal closed')
+                                await randomDelay(1500, 2500)
+                                return 'submitted'
+                        }
+                        // timed out waiting for a confirmation/done click — treat as a failed submit
+                        console.log('⏱️ Confirmation not clicked within 10s, marking as failed')
+                        return 'failed'
+                }
+        } catch (e) {
+                console.debug('Error checking for done-like button:', e)
+        }
+        if (hasBlockingErrors(modal) || hasUnansweredRequired(modal)) {
+                return 'manualPause'
+        }
+        return allowContinue ? 'advance' : 'waiting'
 }
 
 async function waitForModalClose(seconds = 10) {
-	const intervalMs = 500
-	const max = Math.max(1, seconds) * 1000
-	let waited = 0
-	return await new Promise((resolve) => {
-		let id = null
-		let observer = null
-		const listeners = new Map()
+        const intervalMs = 500
+        const max = Math.max(1, seconds) * 1000
+        let waited = 0
+        return await new Promise((resolve) => {
+                let id = null
+                let observer = null
+                const listeners = new Map()
 
-		function cleanupAndResolve(value) {
-			try {
-				if (id) clearInterval(id)
-				if (observer) observer.disconnect()
-				// remove any attached click listeners
-				for (const [el, fn] of listeners) {
-					try { el.removeEventListener('click', fn) } catch (e) { }
-				}
-			} catch (e) { }
-			resolve(value)
-		}
+                function cleanupAndResolve(value) {
+                        try {
+                                if (id) clearInterval(id)
+                                if (observer) observer.disconnect()
+                                // remove any attached click listeners
+                                for (const [el, fn] of listeners) {
+                                        try { el.removeEventListener('click', fn) } catch (e) { }
+                                }
+                        } catch (e) { }
+                        resolve(value)
+                }
 
-		// periodic check for modal removal
-		id = setInterval(() => {
-			const modal = getApplyModal()
-			if (!modal) {
-				cleanupAndResolve(true)
-				return
-			}
-			waited += intervalMs
-			if (waited >= max) {
-				cleanupAndResolve(false)
-			}
-		}, intervalMs)
+                // periodic check for modal removal
+                id = setInterval(() => {
+                        const modal = getApplyModal()
+                        if (!modal) {
+                                cleanupAndResolve(true)
+                                return
+                        }
+                        waited += intervalMs
+                        if (waited >= max) {
+                                cleanupAndResolve(false)
+                        }
+                }, intervalMs)
 
-		// attach click listeners to any done-like buttons inside the modal so we can
-		// advance immediately when the user clicks them.
-		try {
-			const attachToModal = (modalEl) => {
-				if (!modalEl) return
-				const buttons = [...modalEl.querySelectorAll('button')]
-				const doneRE = /done|close|dismiss|finish|got it|all done|completed|finished/i
-				for (const b of buttons) {
-					const text = (b.textContent || b.getAttribute('aria-label') || '')
-					if (!doneRE.test(text)) continue
-					if (listeners.has(b)) continue
-					const fn = () => cleanupAndResolve(true)
-					listeners.set(b, fn)
-					try { b.addEventListener('click', fn) } catch (e) { }
-				}
-			}
+                // attach click listeners to any done-like buttons inside the modal so we can
+                // advance immediately when the user clicks them.
+                try {
+                        const attachToModal = (modalEl) => {
+                                if (!modalEl) return
+                                const buttons = [...modalEl.querySelectorAll('button')]
+                                const doneRE = /done|close|dismiss|finish|got it|all done|completed|finished/i
+                                for (const b of buttons) {
+                                        const text = (b.textContent || b.getAttribute('aria-label') || '')
+                                        if (!doneRE.test(text)) continue
+                                        if (listeners.has(b)) continue
+                                        const fn = () => cleanupAndResolve(true)
+                                        listeners.set(b, fn)
+                                        try { b.addEventListener('click', fn) } catch (e) { }
+                                }
+                        }
 
-			const modalNow = getApplyModal()
-			attachToModal(modalNow)
+                        const modalNow = getApplyModal()
+                        attachToModal(modalNow)
 
-			// observe modal for newly added buttons (some flows add a 'Done' after submit)
-			observer = new MutationObserver((mutations) => {
-				const modal = getApplyModal()
-				attachToModal(modal)
-			})
-			if (modalNow) {
-				try { observer.observe(modalNow, { childList: true, subtree: true }) } catch (e) { }
-			}
-		} catch (e) {
-			// non-fatal; we still fall back to polling
-			console.debug('waitForModalClose: error attaching done-listeners', e)
-		}
-	})
+                        // observe modal for newly added buttons (some flows add a 'Done' after submit)
+                        observer = new MutationObserver((mutations) => {
+                                const modal = getApplyModal()
+                                attachToModal(modal)
+                        })
+                        if (modalNow) {
+                                try { observer.observe(modalNow, { childList: true, subtree: true }) } catch (e) { }
+                        }
+                } catch (e) {
+                        // non-fatal; we still fall back to polling
+                        console.debug('waitForModalClose: error attaching done-listeners', e)
+                }
+        })
 }
 
 async function waitForManualInput(seconds = MANUAL_REVIEW_SECONDS) {
-	if (!isRunning) return 'cancel'
-	console.log(`⏸️ Waiting for manual input for ${seconds} seconds`)
-	try {
-		await chrome.runtime.sendMessage({
-			action: 'manualPause',
-			seconds,
-			reason: 'formIncomplete',
-		})
-	} catch (error) {
-		console.debug('Unable to notify popup for manual pause:', error)
-	}
-	return await new Promise((resolve) => {
-		manualPauseResolver = resolve
-	})
+        if (!isRunning) return 'cancel'
+        console.log(`⏸️ Waiting for manual input for ${seconds} seconds`)
+        try {
+                await chrome.runtime.sendMessage({
+                        action: 'manualPause',
+                        seconds,
+                        reason: 'formIncomplete',
+                })
+        } catch (error) {
+                console.debug('Unable to notify popup for manual pause:', error)
+        }
+        return await new Promise((resolve) => {
+                manualPauseResolver = resolve
+        })
 }
 
 // ========================
 // FILLING LOGIC HELPERS
 // ========================
 function fillFormFields(container) {
-	fillTextInputs(container)
-	fillEmailInputs(container)
-	fillSelectFields(container)
-	fillTextAreas(container)
-	fillRadioButtons(container)
-	fillSkillRelatedFields(container)
+        fillTextInputs(container)
+        fillEmailInputs(container)
+        fillSelectFields(container)
+        fillTextAreas(container)
+        fillRadioButtons(container)
+        fillSkillRelatedFields(container)
 }
 
 function fillTextInputs(container) {
-	const inputs = container.querySelectorAll(
-		'input[type="text"], input[type="tel"], input[type="url"], input[type="number"]',
-	)
-	inputs.forEach((input) => {
-		if (input.value) return
-		const label = getFieldLabel(input)
-		const text = label.toLowerCase()
+        const inputs = container.querySelectorAll(
+                'input[type="text"], input[type="tel"], input[type="url"], input[type="number"]',
+        )
+        inputs.forEach((input) => {
+                if (input.value) return
+                const label = getFieldLabel(input)
+                const text = label.toLowerCase()
 
-		if (text.includes('phone')) setInputValue(input, userData.phone)
-		else if (text.includes('city') || text.includes('location'))
-			setInputValue(input, userData.location)
-		else if (text.includes('linkedin'))
-			setInputValue(input, userData.linkedinProfile)
-		else if (text.includes('year') && text.includes('experience'))
-			setInputValue(input, userData.yearsExperience)
-		else if (text.includes('notice'))
-			setInputValue(input, userData.noticePeriod)
-		else if (text.includes('name') && !text.includes('company'))
-			setInputValue(input, userData.fullName)
-	})
+                if (text.includes('phone')) setInputValue(input, userData.phone)
+                else if (text.includes('city') || text.includes('location'))
+                        setInputValue(input, userData.location)
+                else if (text.includes('linkedin'))
+                        setInputValue(input, userData.linkedinProfile)
+                else if (text.includes('year') && text.includes('experience'))
+                        setInputValue(input, userData.yearsExperience)
+                else if (text.includes('notice'))
+                        setInputValue(input, userData.noticePeriod)
+                else if (text.includes('name') && !text.includes('company'))
+                        setInputValue(input, userData.fullName)
+        })
 }
 
 function fillEmailInputs(container) {
-	container.querySelectorAll('input[type="email"]').forEach((i) => {
-		if (!i.value) setInputValue(i, userData.email)
-	})
+        container.querySelectorAll('input[type="email"]').forEach((i) => {
+                if (!i.value) setInputValue(i, userData.email)
+        })
 }
 
 function fillSelectFields(container) {
-	container.querySelectorAll('select').forEach((select) => {
-		if (select.value) return
-		const label = getFieldLabel(select).toLowerCase()
-		if (label.includes('authorization') && userData.workAuthorization) {
-			const option = [...select.options].find((o) =>
-				o.textContent
-					.toLowerCase()
-					.includes(userData.workAuthorization.toLowerCase()),
-			)
-			if (option) {
-				select.value = option.value
-				select.dispatchEvent(new Event('change', { bubbles: true }))
-			}
-		}
-	})
+        container.querySelectorAll('select').forEach((select) => {
+                if (select.value) return
+                const label = getFieldLabel(select).toLowerCase()
+                if (label.includes('authorization') && userData.workAuthorization) {
+                        const option = [...select.options].find((o) =>
+                                o.textContent
+                                        .toLowerCase()
+                                        .includes(userData.workAuthorization.toLowerCase()),
+                        )
+                        if (option) {
+                                select.value = option.value
+                                select.dispatchEvent(new Event('change', { bubbles: true }))
+                        }
+                }
+        })
 }
 
 function fillTextAreas(container) {
-	container.querySelectorAll('textarea').forEach((area) => {
-		if (!area.value && userData.skills) {
-			const label = getFieldLabel(area)
-			if (label.includes('skill') || label.includes('expertise')) {
-				setInputValue(area, getSkillSummary())
-			}
-		}
-	})
+        container.querySelectorAll('textarea').forEach((area) => {
+                if (!area.value && userData.skills) {
+                        const label = getFieldLabel(area)
+                        if (label.includes('skill') || label.includes('expertise')) {
+                                setInputValue(area, getSkillSummary())
+                        }
+                }
+        })
 }
 
 function fillRadioButtons(container) {
-	const radios = container.querySelectorAll('input[type="radio"]')
-	const groups = {}
-	radios.forEach((r) => (groups[r.name] = [...(groups[r.name] || []), r]))
-	for (const group of Object.values(groups)) {
-		if (group.some((r) => r.checked)) continue
-		const label = getFieldLabel(group[0])
-		if (label.includes('authorization') && userData.workAuthorization) {
-			const yes = group.find((r) =>
-				(r.getAttribute('aria-label') || '')
-					.toLowerCase()
-					.includes(userData.workAuthorization.toLowerCase()),
-			)
-			if (yes) yes.click()
-		} else group[0].click()
-	}
+        const radios = container.querySelectorAll('input[type="radio"]')
+        const groups = {}
+        radios.forEach((r) => (groups[r.name] = [...(groups[r.name] || []), r]))
+        for (const group of Object.values(groups)) {
+                if (group.some((r) => r.checked)) continue
+                const label = getFieldLabel(group[0])
+                if (label.includes('authorization') && userData.workAuthorization) {
+                        const yes = group.find((r) =>
+                                (r.getAttribute('aria-label') || '')
+                                        .toLowerCase()
+                                        .includes(userData.workAuthorization.toLowerCase()),
+                        )
+                        if (yes) yes.click()
+                } else group[0].click()
+        }
 }
 
 function fillSkillRelatedFields(container) {
-	const entries = getSkillEntries()
-	if (!entries.length) return
-	const skillMap = new Map()
-	entries.forEach((entry) => {
-		if (!entry.name) return
-		skillMap.set(entry.name.toLowerCase(), entry)
-	})
-	const years = userData.yearsExperience || '3'
-	const yesLabels = ['yes', 'true', 'available', 'y']
+        const entries = getSkillEntries()
+        if (!entries.length) return
+        const skillMap = new Map()
+        entries.forEach((entry) => {
+                if (!entry.name) return
+                skillMap.set(entry.name.toLowerCase(), entry)
+        })
+        const years = userData.yearsExperience || '3'
+        const yesLabels = ['yes', 'true', 'available', 'y']
 
-	container
-		.querySelectorAll('input[type="text"], input[type="number"]')
-		.forEach((input) => {
-			if (input.value) return
-			const label = getFieldLabel(input).toLowerCase()
-			const skill = [...skillMap.keys()].find((s) => label.includes(s))
-			if (!skill) return
-			const entry = skillMap.get(skill)
-			const value = label.includes('year')
-				? entry.experience || years
-				: entry.hasSkill === false
-					? 'No'
-					: 'Yes'
-			setInputValue(input, value)
-		})
+        container
+                .querySelectorAll('input[type="text"], input[type="number"]')
+                .forEach((input) => {
+                        if (input.value) return
+                        const label = getFieldLabel(input).toLowerCase()
+                        const skill = [...skillMap.keys()].find((s) => label.includes(s))
+                        if (!skill) return
+                        const entry = skillMap.get(skill)
+                        const value = label.includes('year')
+                                ? entry.experience || years
+                                : entry.hasSkill === false
+                                        ? 'No'
+                                        : 'Yes'
+                        setInputValue(input, value)
+                })
 
-	container.querySelectorAll('select').forEach((select) => {
-		if (select.value) return
-		const label = getFieldLabel(select).toLowerCase()
-		const skill = [...skillMap.keys()].find((s) => label.includes(s))
-		if (!skill) return
-		const entry = skillMap.get(skill)
-		const matchLabels = entry.hasSkill === false ? ['no', 'false'] : yesLabels
-		const opt = [...select.options].find((option) =>
-			matchLabels.some((lbl) => option.textContent.toLowerCase().includes(lbl)),
-		)
-		if (opt) {
-			select.value = opt.value
-			select.dispatchEvent(new Event('change', { bubbles: true }))
-		}
-	})
+        container.querySelectorAll('select').forEach((select) => {
+                if (select.value) return
+                const label = getFieldLabel(select).toLowerCase()
+                const skill = [...skillMap.keys()].find((s) => label.includes(s))
+                if (!skill) return
+                const entry = skillMap.get(skill)
+                const matchLabels = entry.hasSkill === false ? ['no', 'false'] : yesLabels
+                const opt = [...select.options].find((option) =>
+                        matchLabels.some((lbl) => option.textContent.toLowerCase().includes(lbl)),
+                )
+                if (opt) {
+                        select.value = opt.value
+                        select.dispatchEvent(new Event('change', { bubbles: true }))
+                }
+        })
 
-	const radios = container.querySelectorAll('input[type="radio"]')
-	const groups = {}
-	radios.forEach((r) => (groups[r.name] = [...(groups[r.name] || []), r]))
-	for (const group of Object.values(groups)) {
-		if (group.some((r) => r.checked)) continue
-		const label = getFieldLabel(group[0]).toLowerCase()
-		const skill = [...skillMap.keys()].find((s) => label.includes(s))
-		if (skill) {
-			const entry = skillMap.get(skill)
-			const yesRadio = group.find((r) => {
-				const lbl = (
-					r.getAttribute('aria-label') ||
-					r.nextSibling?.textContent ||
-					''
-				).toLowerCase()
-				const matchLabels = entry.hasSkill === false ? ['no', 'false'] : yesLabels
-				return matchLabels.some((y) => lbl.includes(y))
-			})
-			if (yesRadio) yesRadio.click()
-		}
-	}
+        const radios = container.querySelectorAll('input[type="radio"]')
+        const groups = {}
+        radios.forEach((r) => (groups[r.name] = [...(groups[r.name] || []), r]))
+        for (const group of Object.values(groups)) {
+                if (group.some((r) => r.checked)) continue
+                const label = getFieldLabel(group[0]).toLowerCase()
+                const skill = [...skillMap.keys()].find((s) => label.includes(s))
+                if (skill) {
+                        const entry = skillMap.get(skill)
+                        const yesRadio = group.find((r) => {
+                                const lbl = (
+                                        r.getAttribute('aria-label') ||
+                                        r.nextSibling?.textContent ||
+                                        ''
+                                ).toLowerCase()
+                                const matchLabels = entry.hasSkill === false ? ['no', 'false'] : yesLabels
+                                return matchLabels.some((y) => lbl.includes(y))
+                        })
+                        if (yesRadio) yesRadio.click()
+                }
+        }
 }
 
 // ========================
 // UTILITIES
 // ========================
+
+function showToast(message, type = 'info') {
+        try {
+                // Remove existing auto-apply toasts
+                const existing = document.querySelectorAll('.li-auto-apply-toast')
+                existing.forEach(t => { try { t.remove() } catch (e) { } })
+                
+                const toast = document.createElement('div')
+                toast.className = 'li-auto-apply-toast'
+                toast.textContent = message
+                
+                const bgColor = type === 'error' ? '#f87171' : type === 'success' ? '#22c55e' : '#6366f1'
+                toast.style.cssText = `
+                        position: fixed;
+                        top: 24px;
+                        right: 24px;
+                        background: ${bgColor};
+                        color: white;
+                        padding: 16px 24px;
+                        border-radius: 8px;
+                        box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+                        z-index: 999999;
+                        font-weight: 600;
+                        font-size: 14px;
+                        max-width: 400px;
+                        animation: slideIn 0.3s ease;
+                `
+                document.body.appendChild(toast)
+                
+                setTimeout(() => {
+                        try {
+                                toast.style.opacity = '0'
+                                toast.style.transform = 'translateX(100px)'
+                                toast.style.transition = 'all 0.3s ease'
+                                setTimeout(() => { try { toast.remove() } catch (e) { } }, 300)
+                        } catch (e) { }
+                }, 4000)
+        } catch (e) {
+                console.debug('showToast error', e)
+        }
+}
+
+function showProgressToast(current, total) {
+        try {
+                // Update or create progress toast (persistent)
+                let toast = document.getElementById('li-auto-apply-progress-toast')
+                if (!toast) {
+                        toast = document.createElement('div')
+                        toast.id = 'li-auto-apply-progress-toast'
+                        toast.style.cssText = `
+                                position: fixed;
+                                bottom: 24px;
+                                right: 24px;
+                                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                                color: white;
+                                padding: 14px 20px;
+                                border-radius: 8px;
+                                box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+                                z-index: 999998;
+                                font-weight: 600;
+                                font-size: 15px;
+                        `
+                        document.body.appendChild(toast)
+                }
+                
+                const progress = total > 0 ? ` - ${Math.round((current / total) * 100)}%` : ''
+                toast.textContent = `🎯 Processing: ${current}/${total}${progress}`
+        } catch (e) {
+                console.debug('showProgressToast error', e)
+        }
+}
+
+async function countEasyApplyJobs() {
+        let count = 0
+        // Quick scan of current job cards for Easy Apply indicators
+        for (const card of jobCards) {
+                try {
+                        const text = (card.innerText || '').toLowerCase()
+                        // Look for Easy Apply text in job card
+                        if (text.includes('easy apply')) {
+                                count++
+                        }
+                } catch (e) { }
+        }
+        return count
+}
+
 function jobCardHasDisqualifier(card) {
-	if (!card) return true
-	const text = (card.innerText || '').toLowerCase()
-	if (
-		/applied|promoted|no longer|expired|other job type|not accepting|closed/i.test(
-			text,
-		)
-	)
-		return true
-	const displayType = card.getAttribute('data-jobcard-displaytype') || ''
-	if (displayType.toLowerCase().includes('promoted')) return true
-	return false
+        if (!card) return true
+        const text = (card.innerText || '').toLowerCase()
+        if (
+                /applied|promoted|no longer|expired|other job type|not accepting|closed/i.test(
+                        text,
+                )
+        )
+                return true
+        const displayType = card.getAttribute('data-jobcard-displaytype') || ''
+        if (displayType.toLowerCase().includes('promoted')) return true
+        return false
 }
 
 function getJobIdFromElement(element) {
-	if (!element) return null
-	const directDatasets = [
-		element.dataset?.liAutoApplyJobId,
-		element.dataset?.jobId,
-		element.dataset?.occludableJobId,
-		element.getAttribute('data-job-id'),
-		element.getAttribute('data-occludable-job-id'),
-		element.getAttribute('data-id'),
-		element.getAttribute('data-entity-urn'),
-	]
-	for (const value of directDatasets) {
-		const normalized = normalizeJobId(value)
-		if (normalized) return normalized
-	}
+        if (!element) return null
+        
+        // Try direct data attributes first
+        const directDatasets = [
+                element.dataset?.liAutoApplyJobId,
+                element.dataset?.jobId,
+                element.dataset?.occludableJobId,
+                element.dataset?.jobCardId,
+                element.getAttribute('data-job-id'),
+                element.getAttribute('data-occludable-job-id'),
+                element.getAttribute('data-job-card-id'),
+                element.getAttribute('data-id'),
+                element.getAttribute('data-entity-urn'),
+        ]
+        for (const value of directDatasets) {
+                const normalized = normalizeJobId(value)
+                if (normalized) return normalized
+        }
 
-	const anchor = element.querySelector('a[href*="/jobs/view/"]')
-	if (anchor) {
-		const href = anchor.getAttribute('href') || anchor.href
-		const normalized = extractJobIdFromHref(href)
-		if (normalized) return normalized
-	}
+        // Try extracting from href (works for collections, search, all layouts)
+        const anchors = element.querySelectorAll('a[href*="/jobs/"]')
+        for (const anchor of anchors) {
+                try {
+                        const href = anchor.getAttribute('href') || anchor.href
+                        const normalized = extractJobIdFromHref(href)
+                        if (normalized) return normalized
+                } catch (e) { }
+        }
 
-	const button = element.querySelector('button[data-job-id]')
-	if (button) {
-		const normalized = normalizeJobId(
-			button.getAttribute('data-job-id') || button.dataset?.jobId,
-		)
-		if (normalized) return normalized
-	}
+        // Try button data attributes
+        const button = element.querySelector('button[data-job-id]')
+        if (button) {
+                const normalized = normalizeJobId(
+                        button.getAttribute('data-job-id') || button.dataset?.jobId,
+                )
+                if (normalized) return normalized
+        }
 
-	return null
+        return null
 }
 
 function normalizeJobId(value) {
-	if (!value) return null
-	const match = String(value).match(/(\d{5,})/)
-	return match ? match[1] : null
+        if (!value) return null
+        const match = String(value).match(/(\d{5,})/)
+        return match ? match[1] : null
 }
 
 function extractJobIdFromHref(href) {
-	if (!href) return null
-	try {
-		const url = new URL(href, location.origin)
-		const directMatch = url.pathname.match(/\/jobs\/view\/(\d+)/)
-		if (directMatch) return directMatch[1]
-		const currentJobId = url.searchParams.get('currentJobId')
-		if (currentJobId) return normalizeJobId(currentJobId)
-	} catch (error) {
-		const fallbackMatch = href.match(/\/jobs\/view\/(\d+)/)
-		if (fallbackMatch) return fallbackMatch[1]
-	}
-	return null
+        if (!href) return null
+        try {
+                const url = new URL(href, location.origin)
+                const directMatch = url.pathname.match(/\/jobs\/view\/(\d+)/)
+                if (directMatch) return directMatch[1]
+                const currentJobId = url.searchParams.get('currentJobId')
+                if (currentJobId) return normalizeJobId(currentJobId)
+        } catch (error) {
+                const fallbackMatch = href.match(/\/jobs\/view\/(\d+)/)
+                if (fallbackMatch) return fallbackMatch[1]
+        }
+        return null
 }
 
 async function openJobCard(card) {
-	if (!card) return
+        if (!card) return
 
-	// Verbose debug info to help diagnose why modals sometimes don't open.
-	const summarizeEl = (el) => {
-		if (!el) return null
-		try {
-			return {
-				tag: el.tagName,
-				text: (el.textContent || '').trim().slice(0, 200),
-				aria: el.getAttribute && el.getAttribute('aria-label'),
-				href: el.getAttribute && (el.getAttribute('href') || el.href),
-				dataControl: el.getAttribute && el.getAttribute('data-control-name'),
-				dataTest: !!(el.getAttribute && el.getAttribute('data-test-apply-button')),
-				disabled: !!el.disabled,
-				visible: !!(el.offsetParent || (el.getClientRects && el.getClientRects().length)),
-			}
-		} catch (e) { return { tag: el.tagName } }
-	}
-	const debugInfo = { attempts: [], clicked: null, opened: false, timestamp: Date.now() }
-	// Attempt several strategies to open the job details reliably.
-	// 1) Click curated target elements inside the card
-	for (const selector of JOB_CLICK_TARGET_SELECTORS) {
-		const target = card.querySelector(selector)
-		if (target) {
-			try {
-				console.debug('openJobCard: clicking target', selector, summarizeEl(target))
-				debugInfo.attempts.push({ selector, found: true, summary: summarizeEl(target) })
-				debugInfo.clicked = { type: 'selector', selector, summary: summarizeEl(target) }
-				triggerClick(target)
-			} catch (e) {
-				console.debug('openJobCard: click failed on target', selector, e)
-				debugInfo.attempts.push({ selector, found: true, error: String(e) })
-			}
-			// wait briefly and check if the apply button / details appeared
-			await randomDelay(250, 500)
-			const appeared = await waitForSelector('button.jobs-apply-button, button[data-test-apply-button], .jobs-easy-apply-modal, [role="dialog"], .jobs-details__main-content, .jobs-search__job-details', 2500)
-			if (appeared) {
-				debugInfo.opened = true
-				debugInfo.openedBy = { method: 'selector', selector }
-				try { window.__li_lastOpenJob = debugInfo } catch (e) { }
-				console.debug('openJobCard: appeared after clicking selector', selector, appeared)
-				return
-			}
-			// otherwise continue to try other targets
-		}
-	}
+        // Verbose debug info to help diagnose why modals sometimes don't open.
+        const summarizeEl = (el) => {
+                if (!el) return null
+                try {
+                        return {
+                                tag: el.tagName,
+                                text: (el.textContent || '').trim().slice(0, 200),
+                                aria: el.getAttribute && el.getAttribute('aria-label'),
+                                href: el.getAttribute && (el.getAttribute('href') || el.href),
+                                dataControl: el.getAttribute && el.getAttribute('data-control-name'),
+                                dataTest: !!(el.getAttribute && el.getAttribute('data-test-apply-button')),
+                                disabled: !!el.disabled,
+                                visible: !!(el.offsetParent || (el.getClientRects && el.getClientRects().length)),
+                        }
+                } catch (e) { return { tag: el.tagName } }
+        }
+        const debugInfo = { attempts: [], clicked: null, opened: false, timestamp: Date.now() }
+        // Attempt several strategies to open the job details reliably.
+        // 1) Click curated target elements inside the card
+        for (const selector of JOB_CLICK_TARGET_SELECTORS) {
+                const target = card.querySelector(selector)
+                if (target) {
+                        try {
+                                console.debug('openJobCard: clicking target', selector, summarizeEl(target))
+                                debugInfo.attempts.push({ selector, found: true, summary: summarizeEl(target) })
+                                debugInfo.clicked = { type: 'selector', selector, summary: summarizeEl(target) }
+                                triggerClick(target)
+                        } catch (e) {
+                                console.debug('openJobCard: click failed on target', selector, e)
+                                debugInfo.attempts.push({ selector, found: true, error: String(e) })
+                        }
+                        // wait briefly and check if the apply button / details appeared
+                        await randomDelay(250, 500)
+                        const appeared = await waitForSelector('button.jobs-apply-button, button[data-test-apply-button], .jobs-easy-apply-modal, [role="dialog"], .jobs-details__main-content, .jobs-search__job-details', 2500)
+                        if (appeared) {
+                                debugInfo.opened = true
+                                debugInfo.openedBy = { method: 'selector', selector }
+                                try { window.__li_lastOpenJob = debugInfo } catch (e) { }
+                                console.debug('openJobCard: appeared after clicking selector', selector, appeared)
+                                return
+                        }
+                        // otherwise continue to try other targets
+                }
+        }
 
-	// 2) Try clicking the card itself
-	try {
-		console.debug('openJobCard: clicking card fallback')
-		debugInfo.attempts.push({ selector: 'card', summary: summarizeEl(card) })
-		debugInfo.clicked = { type: 'card', summary: summarizeEl(card) }
-		triggerClick(card)
-	} catch (e) { console.debug('openJobCard: click card failed', e) }
-	await randomDelay(300, 600)
-	let appeared = await waitForSelector('button.jobs-apply-button, button[data-test-apply-button], .jobs-easy-apply-modal, [role="dialog"], .jobs-details__main-content, .jobs-search__job-details', 2000)
-	if (appeared) {
-		debugInfo.opened = true
-		debugInfo.openedBy = { method: 'card' }
-		try { window.__li_lastOpenJob = debugInfo } catch (e) { }
-		console.debug('openJobCard: appeared after clicking card', appeared)
-		return
-	}
+        // 2) Try clicking the card itself
+        try {
+                console.debug('openJobCard: clicking card fallback')
+                debugInfo.attempts.push({ selector: 'card', summary: summarizeEl(card) })
+                debugInfo.clicked = { type: 'card', summary: summarizeEl(card) }
+                triggerClick(card)
+        } catch (e) { console.debug('openJobCard: click card failed', e) }
+        await randomDelay(300, 600)
+        let appeared = await waitForSelector('button.jobs-apply-button, button[data-test-apply-button], .jobs-easy-apply-modal, [role="dialog"], .jobs-details__main-content, .jobs-search__job-details', 2000)
+        if (appeared) {
+                debugInfo.opened = true
+                debugInfo.openedBy = { method: 'card' }
+                try { window.__li_lastOpenJob = debugInfo } catch (e) { }
+                console.debug('openJobCard: appeared after clicking card', appeared)
+                return
+        }
 
-	// 3) Try to extract a jobs/view href from anchors and navigate (last resort)
-	try {
-		const anchor = card.querySelector('a[href*="/jobs/view/"]') || card.querySelector('a')
-		if (anchor) {
-			const href = anchor.getAttribute('href') || anchor.href
-			if (href) {
-				console.debug('openJobCard: navigating to job href as fallback', href)
-				debugInfo.attempts.push({ selector: 'anchor-href', href, summary: summarizeEl(anchor) })
-				debugInfo.clicked = { type: 'anchor', href, summary: summarizeEl(anchor) }
-				try {
-					// Use location.assign so history behaves normally
-					window.location.assign(href)
-					// give time for the page to load/apply button to render
-					const appeared = await waitForSelector('button.jobs-apply-button, button[data-test-apply-button], .jobs-easy-apply-modal, [role="dialog"]', 4000)
-					if (appeared) {
-						debugInfo.opened = true
-						debugInfo.openedBy = { method: 'navigate', href }
-						try { window.__li_lastOpenJob = debugInfo } catch (e) { }
-						console.debug('openJobCard: appeared after navigation', appeared)
-					}
-				} catch (e) {
-					console.debug('openJobCard: navigation fallback failed', e)
-				}
-				return
-			}
-		}
-	} catch (e) {
-		console.debug('openJobCard: href fallback error', e)
-	}
+        // 3) Try to extract a jobs/view href from anchors and navigate (last resort)
+        try {
+                const anchor = card.querySelector('a[href*="/jobs/view/"]') || card.querySelector('a')
+                if (anchor) {
+                        const href = anchor.getAttribute('href') || anchor.href
+                        if (href) {
+                                console.debug('openJobCard: navigating to job href as fallback', href)
+                                debugInfo.attempts.push({ selector: 'anchor-href', href, summary: summarizeEl(anchor) })
+                                debugInfo.clicked = { type: 'anchor', href, summary: summarizeEl(anchor) }
+                                try {
+                                        // Use location.assign so history behaves normally
+                                        window.location.assign(href)
+                                        // give time for the page to load/apply button to render
+                                        const appeared = await waitForSelector('button.jobs-apply-button, button[data-test-apply-button], .jobs-easy-apply-modal, [role="dialog"]', 4000)
+                                        if (appeared) {
+                                                debugInfo.opened = true
+                                                debugInfo.openedBy = { method: 'navigate', href }
+                                                try { window.__li_lastOpenJob = debugInfo } catch (e) { }
+                                                console.debug('openJobCard: appeared after navigation', appeared)
+                                        }
+                                } catch (e) {
+                                        console.debug('openJobCard: navigation fallback failed', e)
+                                }
+                                return
+                        }
+                }
+        } catch (e) {
+                console.debug('openJobCard: href fallback error', e)
+        }
 
-	// If everything failed, log and return — caller will mark job skipped after timeout/attempts
-	debugInfo.opened = false
-	try { window.__li_lastOpenJob = debugInfo } catch (e) { }
-	console.debug('openJobCard: failed to open job details for card', summarizeEl(card), debugInfo)
+        // If everything failed, log and return — caller will mark job skipped after timeout/attempts
+        debugInfo.opened = false
+        try { window.__li_lastOpenJob = debugInfo } catch (e) { }
+        console.debug('openJobCard: failed to open job details for card', summarizeEl(card), debugInfo)
 }
 
 // Poll for a selector to appear within a timeout (ms). Returns the element or null.
 function waitForSelector(selector, timeout = 2000, interval = 300) {
-	const end = Date.now() + Math.max(0, timeout)
-	return new Promise((resolve) => {
-		const check = () => {
-			try {
-				const el = document.querySelector(selector)
-				if (el) return resolve(el)
-				if (Date.now() > end) return resolve(null)
-			} catch (e) {
-				return resolve(null)
-			}
-			setTimeout(check, Math.max(80, interval))
-		}
-		check()
-	})
+        const end = Date.now() + Math.max(0, timeout)
+        return new Promise((resolve) => {
+                const check = () => {
+                        try {
+                                const el = document.querySelector(selector)
+                                if (el) return resolve(el)
+                                if (Date.now() > end) return resolve(null)
+                        } catch (e) {
+                                return resolve(null)
+                        }
+                        setTimeout(check, Math.max(80, interval))
+                }
+                check()
+        })
 }
 
 function triggerClick(element) {
-	if (!element) return
-	try {
-		// dispatch a sequence of mouse events for more reliable clicks
-		const down = new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window })
-		element.dispatchEvent(down)
-		const up = new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window })
-		element.dispatchEvent(up)
-		const click = new MouseEvent('click', { bubbles: true, cancelable: true, view: window })
-		element.dispatchEvent(click)
-	} catch (e) {
-		try { element.click() } catch (ee) { }
-	}
+        if (!element) return
+        try {
+                // dispatch a sequence of mouse events for more reliable clicks
+                const down = new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window })
+                element.dispatchEvent(down)
+                const up = new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window })
+                element.dispatchEvent(up)
+                const click = new MouseEvent('click', { bubbles: true, cancelable: true, view: window })
+                element.dispatchEvent(click)
+        } catch (e) {
+                try { element.click() } catch (ee) { }
+        }
 }
 
 // Count easy apply jobs within collected job cards (or page) and show progress
 function countEasyApplyJobs() {
-	try {
-		let count = 0
-		// ensure jobCards is populated; if not, collectJobCards may be called first
-		const cards = jobCards && jobCards.length ? jobCards : (() => {
-			const collected = []
-			const seenElements = new Set()
-			for (const selector of JOB_CARD_SELECTORS) {
-				const nodes = document.querySelectorAll(selector)
-				if (!nodes?.length) continue
-				nodes.forEach((node) => {
-					if (seenElements.has(node)) return
-					seenElements.add(node)
-					collected.push(node)
-				})
-			}
-			return collected
-		})()
+        try {
+                let count = 0
+                // ensure jobCards is populated; if not, collectJobCards may be called first
+                const cards = jobCards && jobCards.length ? jobCards : (() => {
+                        const collected = []
+                        const seenElements = new Set()
+                        for (const selector of JOB_CARD_SELECTORS) {
+                                const nodes = document.querySelectorAll(selector)
+                                if (!nodes?.length) continue
+                                nodes.forEach((node) => {
+                                        if (seenElements.has(node)) return
+                                        seenElements.add(node)
+                                        collected.push(node)
+                                })
+                        }
+                        return collected
+                })()
 
-		for (const card of cards) {
-			// skip cards that look already applied
-			if (isAlreadyApplied(card)) continue
-			const btn = findEasyApplyButton(card)
-			if (btn) count++
-		}
-		totalEasyApplyJobs = count
-		return count
-	} catch (e) {
-		console.debug('countEasyApplyJobs error', e)
-		totalEasyApplyJobs = 0
-		return 0
-	}
+                for (const card of cards) {
+                        // skip cards that look already applied
+                        if (isAlreadyApplied(card)) continue
+                        const btn = findEasyApplyButton(card)
+                        if (btn) count++
+                }
+                totalEasyApplyJobs = count
+                return count
+        } catch (e) {
+                console.debug('countEasyApplyJobs error', e)
+                totalEasyApplyJobs = 0
+                return 0
+        }
 }
 
 function ensureProgressOverlay() {
-	try {
-		let el = document.getElementById('li-auto-apply-progress')
-		if (!el) {
-			el = document.createElement('div')
-			el.id = 'li-auto-apply-progress'
-			el.style.cssText = 'position:fixed;left:16px;top:16px;padding:8px 12px;border-radius:8px;background:rgba(0,0,0,0.6);color:#fff;z-index:999999;font-weight:700'
-			document.body.appendChild(el)
-		}
-		return el
-	} catch (e) { return null }
+        try {
+                let el = document.getElementById('li-auto-apply-progress')
+                if (!el) {
+                        el = document.createElement('div')
+                        el.id = 'li-auto-apply-progress'
+                        el.style.cssText = 'position:fixed;left:16px;top:16px;padding:8px 12px;border-radius:8px;background:rgba(0,0,0,0.6);color:#fff;z-index:999999;font-weight:700'
+                        document.body.appendChild(el)
+                }
+                return el
+        } catch (e) { return null }
 }
 
 function updateProgressOverlay(current, total) {
-	try {
-		const el = ensureProgressOverlay()
-		if (!el) return
-		el.textContent = `Job ${current} / ${total}`
-	} catch (e) { }
+        try {
+                const el = ensureProgressOverlay()
+                if (!el) return
+                el.textContent = `Job ${current} / ${total}`
+        } catch (e) { }
 }
 
 function removeProgressOverlay() {
-	try { const el = document.getElementById('li-auto-apply-progress'); if (el) el.remove() } catch (e) { }
+        try { const el = document.getElementById('li-auto-apply-progress'); if (el) el.remove() } catch (e) { }
 }
 
 function showNoJobsToast(msg = 'No Easy Apply jobs found. Stopping.') {
-	try {
-		const id = 'li-auto-apply-nojobs'
-		let el = document.getElementById(id)
-		if (el) try { el.remove() } catch (e) { }
-		el = document.createElement('div')
-		el.id = id
-		el.style.cssText = 'position:fixed;left:50%;top:20%;transform:translateX(-50%);background:#111;color:#fff;padding:12px 16px;border-radius:8px;z-index:999999;box-shadow:0 6px 24px rgba(0,0,0,0.6)'
-		el.textContent = msg
-		document.body.appendChild(el)
-		setTimeout(() => { try { el.remove() } catch (e) { } }, 5000)
-	} catch (e) { }
+        try {
+                const id = 'li-auto-apply-nojobs'
+                let el = document.getElementById(id)
+                if (el) try { el.remove() } catch (e) { }
+                el = document.createElement('div')
+                el.id = id
+                el.style.cssText = 'position:fixed;left:50%;top:20%;transform:translateX(-50%);background:#111;color:#fff;padding:12px 16px;border-radius:8px;z-index:999999;box-shadow:0 6px 24px rgba(0,0,0,0.6)'
+                el.textContent = msg
+                document.body.appendChild(el)
+                setTimeout(() => { try { el.remove() } catch (e) { } }, 5000)
+        } catch (e) { }
 }
 
 function getApplyModal() {
-	return document.querySelector('.jobs-easy-apply-modal, [role="dialog"]')
+        return document.querySelector('.jobs-easy-apply-modal, [role="dialog"]')
 }
 
 function hasBlockingErrors(container) {
-	if (!container) return false
-	if (container.querySelector('[aria-invalid="true"]')) return true
-	if (container.querySelector('.artdeco-inline-feedback--error')) return true
-	if (container.querySelector('.artdeco-inline-feedback__message')) return true
-	if (document.querySelector('.artdeco-toast-item--error')) return true
-	return false
+        if (!container) return false
+        if (container.querySelector('[aria-invalid="true"]')) return true
+        if (container.querySelector('.artdeco-inline-feedback--error')) return true
+        if (container.querySelector('.artdeco-inline-feedback__message')) return true
+        if (document.querySelector('.artdeco-toast-item--error')) return true
+        return false
 }
 
 function hasUnansweredRequired(container) {
-	if (!container) return false
-	const selector =
-		'input[required], select[required], textarea[required], input[aria-required="true"], select[aria-required="true"], textarea[aria-required="true"]'
-	const requiredFields = [...container.querySelectorAll(selector)]
-	const checkedRadioGroups = new Set()
-	for (const field of requiredFields) {
-		if (field.type === 'radio') {
-			if (checkedRadioGroups.has(field.name)) continue
-			checkedRadioGroups.add(field.name)
-			const group = [...container.querySelectorAll('input[type="radio"]')].filter(
-				(radio) => radio.name === field.name,
-			)
-			if (!group.some((radio) => radio.checked)) return true
-			continue
-		}
-		if (field.type === 'checkbox') {
-			if (!field.checked) return true
-			continue
-		}
-		if (!field.value) return true
-	}
-	return false
+        if (!container) return false
+        const selector =
+                'input[required], select[required], textarea[required], input[aria-required="true"], select[aria-required="true"], textarea[aria-required="true"]'
+        const requiredFields = [...container.querySelectorAll(selector)]
+        const checkedRadioGroups = new Set()
+        for (const field of requiredFields) {
+                if (field.type === 'radio') {
+                        if (checkedRadioGroups.has(field.name)) continue
+                        checkedRadioGroups.add(field.name)
+                        const group = [...container.querySelectorAll('input[type="radio"]')].filter(
+                                (radio) => radio.name === field.name,
+                        )
+                        if (!group.some((radio) => radio.checked)) return true
+                        continue
+                }
+                if (field.type === 'checkbox') {
+                        if (!field.checked) return true
+                        continue
+                }
+                if (!field.value) return true
+        }
+        return false
 }
 
 function detectLinkedInLimit() {
-	const limitPhrases = [
-		'reached the maximum number of job applications',
-		'hit a limit',
-		'maximum number of linkedin job applications',
-		'please wait before applying again',
-		'try again later',
-	]
-	const toast = document.querySelector('.artdeco-toast-item__message')
-	if (toast) {
-		const text = toast.textContent.toLowerCase()
-		if (limitPhrases.some((phrase) => text.includes(phrase))) return true
-	}
-	const modal = getApplyModal()
-	if (modal) {
-		const text = modal.textContent.toLowerCase()
-		if (limitPhrases.some((phrase) => text.includes(phrase))) return true
-	}
-	return false
+        const limitPhrases = [
+                'reached the maximum number of job applications',
+                'hit a limit',
+                'maximum number of linkedin job applications',
+                'please wait before applying again',
+                'try again later',
+        ]
+        const toast = document.querySelector('.artdeco-toast-item__message')
+        if (toast) {
+                const text = toast.textContent.toLowerCase()
+                if (limitPhrases.some((phrase) => text.includes(phrase))) return true
+        }
+        const modal = getApplyModal()
+        if (modal) {
+                const text = modal.textContent.toLowerCase()
+                if (limitPhrases.some((phrase) => text.includes(phrase))) return true
+        }
+        return false
 }
 
 async function handleLinkedInLimit() {
-	if (!isRunning || limitNotified) return
-	limitNotified = true
-	console.warn('⛔ LinkedIn apply limit detected. Stopping automation.')
-	isRunning = false
-	resolveManualPause('cancel')
-	await pushStatsUpdate({ isRunning: false })
-	try { cleanupJobUI() } catch (e) { console.debug('cleanupJobUI failed during limit handling:', e) }
-	stopContentRunTimer()
-	try {
-		await chrome.runtime.sendMessage({ action: 'linkedinLimitReached' })
-	} catch (error) {
-		console.debug('Failed to notify popup about LinkedIn limit:', error)
-	}
+        if (!isRunning || limitNotified) return
+        limitNotified = true
+        console.warn('⛔ LinkedIn apply limit detected. Stopping automation.')
+        isRunning = false
+        resolveManualPause('cancel')
+        await pushStatsUpdate({ isRunning: false })
+        try { cleanupJobUI() } catch (e) { console.debug('cleanupJobUI failed during limit handling:', e) }
+        stopContentRunTimer()
+        try {
+                await chrome.runtime.sendMessage({ action: 'linkedinLimitReached' })
+        } catch (error) {
+                console.debug('Failed to notify popup about LinkedIn limit:', error)
+        }
 }
 
 function resolveManualPause(result) {
-	if (!manualPauseResolver) return
-	const resolver = manualPauseResolver
-	manualPauseResolver = null
-	resolver(result)
-	notifyManualPauseCleared()
+        if (!manualPauseResolver) return
+        const resolver = manualPauseResolver
+        manualPauseResolver = null
+        resolver(result)
+        notifyManualPauseCleared()
 }
 
 function notifyManualPauseCleared() {
-	try {
-		chrome.runtime
-			.sendMessage({ action: 'manualPauseCleared', isRunning })
-			.catch(() => { })
-	} catch (error) {
-		console.debug('Failed to notify popup that manual pause cleared:', error)
-	}
+        try {
+                chrome.runtime
+                        .sendMessage({ action: 'manualPauseCleared', isRunning })
+                        .catch(() => { })
+        } catch (error) {
+                console.debug('Failed to notify popup that manual pause cleared:', error)
+        }
 }
 
 function getFieldLabel(el) {
-	const aria = el.getAttribute('aria-label') || ''
-	const placeholder = el.getAttribute('placeholder') || ''
-	const name = el.getAttribute('name') || ''
-	const id = el.getAttribute('id') || ''
-	const labelEl = el.closest('label, .jobs-easy-apply-form-element')
-	const text = labelEl ? labelEl.textContent : ''
-	return `${aria} ${placeholder} ${name} ${id} ${text}`.toLowerCase()
+        const aria = el.getAttribute('aria-label') || ''
+        const placeholder = el.getAttribute('placeholder') || ''
+        const name = el.getAttribute('name') || ''
+        const id = el.getAttribute('id') || ''
+        const labelEl = el.closest('label, .jobs-easy-apply-form-element')
+        const text = labelEl ? labelEl.textContent : ''
+        return `${aria} ${placeholder} ${name} ${id} ${text}`.toLowerCase()
 }
 
 function setInputValue(el, val) {
-	el.value = val
-	el.dispatchEvent(new Event('input', { bubbles: true }))
-	el.dispatchEvent(new Event('change', { bubbles: true }))
+        el.value = val
+        el.dispatchEvent(new Event('input', { bubbles: true }))
+        el.dispatchEvent(new Event('change', { bubbles: true }))
 }
 
 function findButton(container, texts) {
-	return [...container.querySelectorAll('button')].find((btn) =>
-		texts.some((t) => btn.textContent.trim().includes(t)),
-	)
+        return [...container.querySelectorAll('button')].find((btn) =>
+                texts.some((t) => btn.textContent.trim().includes(t)),
+        )
 }
 
 function closeModal() {
-	const btn = document.querySelector(
-		'.artdeco-modal__dismiss, button[aria-label*="Dismiss"]',
-	)
-	if (btn) btn.click()
+        const btn = document.querySelector(
+                '.artdeco-modal__dismiss, button[aria-label*="Dismiss"]',
+        )
+        if (btn) btn.click()
 }
 
 async function incrementApplied() {
-	const { appliedCount = 0 } = await chrome.storage.local.get(['appliedCount'])
-	const newValue = appliedCount + 1
-	await chrome.storage.local.set({ appliedCount: newValue })
-	await pushStatsUpdate({ isRunning })
+        const { appliedCount = 0 } = await chrome.storage.local.get(['appliedCount'])
+        const newValue = appliedCount + 1
+        await chrome.storage.local.set({ appliedCount: newValue })
+        await pushStatsUpdate({ isRunning })
 }
 
 async function incrementSkipped() {
-	const { skippedCount = 0 } = await chrome.storage.local.get(['skippedCount'])
-	const newValue = skippedCount + 1
-	await chrome.storage.local.set({ skippedCount: newValue })
-	await pushStatsUpdate({ isRunning })
+        const { skippedCount = 0 } = await chrome.storage.local.get(['skippedCount'])
+        const newValue = skippedCount + 1
+        await chrome.storage.local.set({ skippedCount: newValue })
+        await pushStatsUpdate({ isRunning })
 }
 
 async function incrementFailed() {
-	const { failedCount = 0 } = await chrome.storage.local.get(['failedCount'])
-	const newValue = failedCount + 1
-	await chrome.storage.local.set({ failedCount: newValue })
-	await pushStatsUpdate({ isRunning })
+        const { failedCount = 0 } = await chrome.storage.local.get(['failedCount'])
+        const newValue = failedCount + 1
+        await chrome.storage.local.set({ failedCount: newValue })
+        await pushStatsUpdate({ isRunning })
 }
 
 function randomDelay(min = delayRange.min, max = delayRange.max) {
-	const time = Math.floor(Math.random() * (max - min + 1)) + min
-	return new Promise((r) => setTimeout(r, time))
+        const time = Math.floor(Math.random() * (max - min + 1)) + min
+        return new Promise((r) => setTimeout(r, time))
 }
 
 // ========================
 // Content running-time badge
 // ========================
 function createContentRunBadge() {
-	if (contentRunBadge) return contentRunBadge
-	try {
-		const badge = document.createElement('div')
-		badge.id = 'li-auto-apply-run-timer'
-		// circular ring with centered text
-		badge.style.cssText = [
-			'position:fixed',
-			'right:16px',
-			'top:80px',
-			'width:56px',
-			'height:56px',
-			'border-radius:50%',
-			'border:6px solid rgba(255,255,255,0.06)',
-			'background:rgba(0,0,0,0.35)',
-			'color:#fff',
-			'display:flex',
-			'align-items:center',
-			'justify-content:center',
-			'font-size:12px',
-			'line-height:1',
-			'text-align:center',
-			'z-index:99999',
-			'box-shadow:0 2px 8px rgba(0,0,0,0.3)'
-		].join(';')
-		badge.innerHTML = '<span class="li-run-text" style="pointer-events:none">0m 00s</span>'
-		document.body.appendChild(badge)
-		contentRunBadge = badge
-		return badge
-	} catch (e) {
-		console.debug('Unable to create content run badge:', e)
-		return null
-	}
+        if (contentRunBadge) return contentRunBadge
+        try {
+                const badge = document.createElement('div')
+                badge.id = 'li-auto-apply-run-timer'
+                // circular ring with centered text
+                badge.style.cssText = [
+                        'position:fixed',
+                        'right:16px',
+                        'top:80px',
+                        'width:56px',
+                        'height:56px',
+                        'border-radius:50%',
+                        'border:6px solid rgba(255,255,255,0.06)',
+                        'background:rgba(0,0,0,0.35)',
+                        'color:#fff',
+                        'display:flex',
+                        'align-items:center',
+                        'justify-content:center',
+                        'font-size:12px',
+                        'line-height:1',
+                        'text-align:center',
+                        'z-index:99999',
+                        'box-shadow:0 2px 8px rgba(0,0,0,0.3)'
+                ].join(';')
+                badge.innerHTML = '<span class="li-run-text" style="pointer-events:none">0m 00s</span>'
+                document.body.appendChild(badge)
+                contentRunBadge = badge
+                return badge
+        } catch (e) {
+                console.debug('Unable to create content run badge:', e)
+                return null
+        }
 }
 
 function updateContentRunBadge() {
-	if (!contentRunBadge) return
-	const sec = contentRunElapsed || 0
-	const span = contentRunBadge.querySelector('.li-run-text')
-	const txt = formatTimer(sec)
-	if (span) span.textContent = txt
-	else contentRunBadge.textContent = txt
+        if (!contentRunBadge) return
+        const sec = contentRunElapsed || 0
+        const span = contentRunBadge.querySelector('.li-run-text')
+        const txt = formatTimer(sec)
+        if (span) span.textContent = txt
+        else contentRunBadge.textContent = txt
 }
 
 function startContentRunTimer() {
-	if (contentRunInterval) return
-	contentRunElapsed = 0
-	const badge = createContentRunBadge()
-	updateContentRunBadge()
-	contentRunInterval = setInterval(() => {
-		contentRunElapsed += 1
-		updateContentRunBadge()
-	}, 1000)
+        if (contentRunInterval) return
+        contentRunElapsed = 0
+        const badge = createContentRunBadge()
+        updateContentRunBadge()
+        contentRunInterval = setInterval(() => {
+                contentRunElapsed += 1
+                updateContentRunBadge()
+        }, 1000)
 }
 
 function stopContentRunTimer() {
-	try {
-		if (contentRunInterval) {
-			clearInterval(contentRunInterval)
-			contentRunInterval = null
-		}
-		if (contentRunBadge) {
-			contentRunBadge.remove()
-			contentRunBadge = null
-		}
-	} catch (e) {
-		console.debug('Error stopping content run timer:', e)
-	}
+        try {
+                if (contentRunInterval) {
+                        clearInterval(contentRunInterval)
+                        contentRunInterval = null
+                }
+                if (contentRunBadge) {
+                        contentRunBadge.remove()
+                        contentRunBadge = null
+                }
+        } catch (e) {
+                console.debug('Error stopping content run timer:', e)
+        }
 }
 function attachTimerToJob(card, seconds, onTimeout) {
-	if (!card) return { clear: () => { } }
-	// create either a small ring badge or a textual badge depending on settings
-	let badge = card.querySelector('.li-auto-apply__timer')
-	if (!badge) {
-		badge = document.createElement('div')
-		badge.className = 'li-auto-apply__timer'
-		try { if (!card.style.position) card.style.position = 'relative' } catch (e) { }
-		if (perJobRingTimers) {
-			// place ring on the left to avoid overlapping with status label
-			badge.style.cssText = 'position:absolute;left:8px;top:8px;width:40px;height:40px;border-radius:50%;border:4px solid rgba(255,255,255,0.06);background:rgba(0,0,0,0.35);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;line-height:1;text-align:center;z-index:9999'
-			badge.classList.add('ring')
-			badge.innerHTML = '<span class="li-job-text" style="pointer-events:none">' + formatTimer(seconds) + '</span>'
-		} else {
-			// textual badge placed top-left when not ring (keeps layout balanced)
-			badge.style.cssText = 'position:absolute;left:8px;top:8px;padding:4px 6px;border-radius:6px;background:rgba(0,0,0,0.65);color:#fff;font-size:12px;z-index:9999'
-			badge.textContent = formatTimer(seconds)
-		}
-		card.appendChild(badge)
-	}
-	let remaining = seconds
-	const id = setInterval(() => {
-		remaining -= 1
-		if (remaining <= 0) {
-			clearInterval(id)
-			try { badge.remove() } catch (e) { }
-			if (typeof onTimeout === 'function') onTimeout()
-			return
-		}
-		if (perJobRingTimers) {
-			const span = badge.querySelector('.li-job-text')
-			if (span) span.textContent = formatTimer(remaining)
-			else badge.textContent = formatTimer(remaining)
-		} else {
-			badge.textContent = formatTimer(remaining)
-		}
-	}, 1000)
-	return { clear: () => { clearInterval(id); try { badge.remove() } catch (e) { } } }
+        if (!card) return { clear: () => { } }
+        // create either a small ring badge or a textual badge depending on settings
+        let badge = card.querySelector('.li-auto-apply__timer')
+        if (!badge) {
+                badge = document.createElement('div')
+                badge.className = 'li-auto-apply__timer'
+                try { if (!card.style.position) card.style.position = 'relative' } catch (e) { }
+                if (perJobRingTimers) {
+                        // place ring on the left to avoid overlapping with status label
+                        badge.style.cssText = 'position:absolute;left:8px;top:8px;width:40px;height:40px;border-radius:50%;border:4px solid rgba(255,255,255,0.06);background:rgba(0,0,0,0.35);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;line-height:1;text-align:center;z-index:9999'
+                        badge.classList.add('ring')
+                        badge.innerHTML = '<span class="li-job-text" style="pointer-events:none">' + formatTimer(seconds) + '</span>'
+                } else {
+                        // textual badge placed top-left when not ring (keeps layout balanced)
+                        badge.style.cssText = 'position:absolute;left:8px;top:8px;padding:4px 6px;border-radius:6px;background:rgba(0,0,0,0.65);color:#fff;font-size:12px;z-index:9999'
+                        badge.textContent = formatTimer(seconds)
+                }
+                card.appendChild(badge)
+        }
+        let remaining = seconds
+        const id = setInterval(() => {
+                remaining -= 1
+                if (remaining <= 0) {
+                        clearInterval(id)
+                        try { badge.remove() } catch (e) { }
+                        if (typeof onTimeout === 'function') onTimeout()
+                        return
+                }
+                if (perJobRingTimers) {
+                        const span = badge.querySelector('.li-job-text')
+                        if (span) span.textContent = formatTimer(remaining)
+                        else badge.textContent = formatTimer(remaining)
+                } else {
+                        badge.textContent = formatTimer(remaining)
+                }
+        }, 1000)
+        return { clear: () => { clearInterval(id); try { badge.remove() } catch (e) { } } }
 }
 
 // JOB CARD UI HELPERS: visual label + background for status
 function markJobStatus(card, status) {
-	if (!card) return
-	// ensure position for absolute children
-	try { if (!card.style.position) card.style.position = 'relative' } catch (e) { }
+        if (!card) return
+        // ensure position for absolute children
+        try { if (!card.style.position) card.style.position = 'relative' } catch (e) { }
 
-	// create or find a small textual label in the top-right
-	let statusLabel = card.querySelector('.li-auto-apply-statuslabel')
-	if (!statusLabel) {
-		statusLabel = document.createElement('div')
-		statusLabel.className = 'li-auto-apply-statuslabel'
-		// move label to the right to avoid overlap with per-job timer (now on left)
-		statusLabel.style.cssText = 'position:absolute;right:8px;top:8px;padding:6px 10px;border-radius:14px;font-size:12px;z-index:99999;pointer-events:none;box-shadow:0 2px 6px rgba(0,0,0,0.15);font-weight:600'
-		try { card.appendChild(statusLabel) } catch (e) { }
-	}
+        // create or find a small textual label in the top-right
+        let statusLabel = card.querySelector('.li-auto-apply-statuslabel')
+        if (!statusLabel) {
+                statusLabel = document.createElement('div')
+                statusLabel.className = 'li-auto-apply-statuslabel'
+                // move label to the right to avoid overlap with per-job timer (now on left)
+                statusLabel.style.cssText = 'position:absolute;right:8px;top:8px;padding:6px 10px;border-radius:14px;font-size:12px;z-index:99999;pointer-events:none;box-shadow:0 2px 6px rgba(0,0,0,0.15);font-weight:600'
+                try { card.appendChild(statusLabel) } catch (e) { }
+        }
 
-	// clear previous marker classes
-	card.classList.remove('li-auto-apply--processing', 'li-auto-apply--applied', 'li-auto-apply--skipped', 'li-auto-apply--stopped')
+        // clear previous marker classes
+        card.classList.remove('li-auto-apply--processing', 'li-auto-apply--applied', 'li-auto-apply--skipped', 'li-auto-apply--stopped')
 
-	if (status === 'processing') {
-		card.classList.add('li-auto-apply--processing')
-		try {
-			card.style.transition = 'background-color 300ms ease'
-			card.style.backgroundColor = 'rgba(255, 223, 93, 0.12)'
-			statusLabel.textContent = 'Applying…'
-			statusLabel.style.background = 'linear-gradient(90deg, rgba(255,223,93,0.98), rgba(255,180,50,0.95))'
-			statusLabel.style.color = '#111'
-			// add pulsing animation
-			statusLabel.classList.add('pulse')
-		} catch (e) { }
-	} else if (status === 'applied') {
-		card.classList.add('li-auto-apply--applied')
-		try {
-			card.style.backgroundColor = 'rgba(34, 197, 94, 0.12)'
-			statusLabel.textContent = 'Applied'
-			statusLabel.style.background = 'rgba(34,197,94,0.95)'
-			statusLabel.style.color = '#fff'
-		} catch (e) { }
-	} else if (status === 'skipped') {
-		card.classList.add('li-auto-apply--skipped')
-		try {
-			card.style.backgroundColor = 'rgba(107, 114, 128, 0.06)'
-			statusLabel.textContent = 'Skipped'
-			statusLabel.style.background = 'rgba(107,114,128,0.95)'
-			statusLabel.style.color = '#fff'
-			statusLabel.classList.remove('pulse')
-		} catch (e) { }
-	} else if (status === 'stopped') {
-		card.classList.add('li-auto-apply--stopped')
-		try {
-			card.style.backgroundColor = 'rgba(239, 68, 68, 0.06)'
-			statusLabel.textContent = 'Stopped'
-			statusLabel.style.background = 'rgba(239,68,68,0.95)'
-			statusLabel.style.color = '#fff'
-			statusLabel.classList.remove('pulse')
-		} catch (e) { }
-	} else if (status === 'failed') {
-		card.classList.add('li-auto-apply--failed')
-		try {
-			card.style.backgroundColor = 'rgba(220, 38, 38, 0.06)'
-			statusLabel.textContent = 'Failed'
-			statusLabel.style.background = 'linear-gradient(90deg, rgba(220,38,38,0.95), rgba(185,28,28,0.95))'
-			statusLabel.style.color = '#fff'
-			statusLabel.classList.remove('pulse')
-		} catch (e) { }
-	} else {
-		// unknown/clear: remove label if present
-		try { statusLabel.remove() } catch (e) { }
-	}
+        if (status === 'processing') {
+                card.classList.add('li-auto-apply--processing')
+                try {
+                        card.style.transition = 'background-color 300ms ease'
+                        card.style.backgroundColor = 'rgba(255, 223, 93, 0.12)'
+                        statusLabel.textContent = 'Applying…'
+                        statusLabel.style.background = 'linear-gradient(90deg, rgba(255,223,93,0.98), rgba(255,180,50,0.95))'
+                        statusLabel.style.color = '#111'
+                        // add pulsing animation
+                        statusLabel.classList.add('pulse')
+                } catch (e) { }
+        } else if (status === 'applied') {
+                card.classList.add('li-auto-apply--applied')
+                try {
+                        card.style.backgroundColor = 'rgba(34, 197, 94, 0.12)'
+                        statusLabel.textContent = 'Applied'
+                        statusLabel.style.background = 'rgba(34,197,94,0.95)'
+                        statusLabel.style.color = '#fff'
+                } catch (e) { }
+        } else if (status === 'skipped') {
+                card.classList.add('li-auto-apply--skipped')
+                try {
+                        card.style.backgroundColor = 'rgba(107, 114, 128, 0.06)'
+                        statusLabel.textContent = 'Skipped'
+                        statusLabel.style.background = 'rgba(107,114,128,0.95)'
+                        statusLabel.style.color = '#fff'
+                        statusLabel.classList.remove('pulse')
+                } catch (e) { }
+        } else if (status === 'stopped') {
+                card.classList.add('li-auto-apply--stopped')
+                try {
+                        card.style.backgroundColor = 'rgba(239, 68, 68, 0.06)'
+                        statusLabel.textContent = 'Stopped'
+                        statusLabel.style.background = 'rgba(239,68,68,0.95)'
+                        statusLabel.style.color = '#fff'
+                        statusLabel.classList.remove('pulse')
+                } catch (e) { }
+        } else if (status === 'failed') {
+                card.classList.add('li-auto-apply--failed')
+                try {
+                        card.style.backgroundColor = 'rgba(220, 38, 38, 0.06)'
+                        statusLabel.textContent = 'Failed'
+                        statusLabel.style.background = 'linear-gradient(90deg, rgba(220,38,38,0.95), rgba(185,28,28,0.95))'
+                        statusLabel.style.color = '#fff'
+                        statusLabel.classList.remove('pulse')
+                } catch (e) { }
+        } else {
+                // unknown/clear: remove label if present
+                try { statusLabel.remove() } catch (e) { }
+        }
 }
 
 function formatSecondsAsMinutes(sec) {
-	const m = Math.floor(sec / 60)
-	const s = sec % 60
-	return `${m}m ${String(s).padStart(2, '0')}s`
+        const m = Math.floor(sec / 60)
+        const s = sec % 60
+        return `${m}m ${String(s).padStart(2, '0')}s`
 }
 
 // Convert existing textual per-job badges to ring style (or vice versa) live
 function convertExistingBadges(toRing) {
-	try {
-		ensureInjectedStyles()
-		const badges = document.querySelectorAll('.li-auto-apply__timer')
-		badges.forEach((badge) => {
-			try {
-				const txt = (badge.textContent || badge.innerText || '').trim()
-				if (toRing) {
-					badge.classList.add('ring')
-					badge.style.cssText = 'position:absolute;left:8px;top:8px;width:40px;height:40px;border-radius:50%;border:4px solid rgba(255,255,255,0.06);background:rgba(0,0,0,0.35);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;line-height:1;text-align:center;z-index:9999'
-					// ensure inner span exists for updates
-					const span = badge.querySelector('.li-job-text') || document.createElement('span')
-					span.className = 'li-job-text'
-					span.style.pointerEvents = 'none'
-					span.textContent = txt || formatTimer(perJobTimeoutSeconds)
-					badge.innerHTML = ''
-					badge.appendChild(span)
-				} else {
-					badge.classList.remove('ring')
-					badge.style.cssText = 'position:absolute;left:8px;top:8px;padding:4px 6px;border-radius:6px;background:rgba(0,0,0,0.65);color:#fff;font-size:12px;z-index:9999'
-					// keep human readable text
-					const span = badge.querySelector('.li-job-text')
-					badge.textContent = span ? span.textContent : txt
-				}
-			} catch (e) { }
-		})
-	} catch (e) {
-		console.debug('convertExistingBadges error', e)
-	}
+        try {
+                ensureInjectedStyles()
+                const badges = document.querySelectorAll('.li-auto-apply__timer')
+                badges.forEach((badge) => {
+                        try {
+                                const txt = (badge.textContent || badge.innerText || '').trim()
+                                if (toRing) {
+                                        badge.classList.add('ring')
+                                        badge.style.cssText = 'position:absolute;left:8px;top:8px;width:40px;height:40px;border-radius:50%;border:4px solid rgba(255,255,255,0.06);background:rgba(0,0,0,0.35);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;line-height:1;text-align:center;z-index:9999'
+                                        // ensure inner span exists for updates
+                                        const span = badge.querySelector('.li-job-text') || document.createElement('span')
+                                        span.className = 'li-job-text'
+                                        span.style.pointerEvents = 'none'
+                                        span.textContent = txt || formatTimer(perJobTimeoutSeconds)
+                                        badge.innerHTML = ''
+                                        badge.appendChild(span)
+                                } else {
+                                        badge.classList.remove('ring')
+                                        badge.style.cssText = 'position:absolute;left:8px;top:8px;padding:4px 6px;border-radius:6px;background:rgba(0,0,0,0.65);color:#fff;font-size:12px;z-index:9999'
+                                        // keep human readable text
+                                        const span = badge.querySelector('.li-job-text')
+                                        badge.textContent = span ? span.textContent : txt
+                                }
+                        } catch (e) { }
+                })
+        } catch (e) {
+                console.debug('convertExistingBadges error', e)
+        }
 }
 
 function formatTimer(sec) {
-	const s = Math.max(0, Math.floor(sec || 0))
-	const m = Math.floor(s / 60)
-	const rem = s % 60
-	if (compactTimerFormat) {
-		if (m === 0) return `${String(rem).padStart(2, '0')}s`
-		return `${m}m${String(rem).padStart(2, '0')}s`
-	}
-	return `${m}m ${String(rem).padStart(2, '0')}s`
+        const s = Math.max(0, Math.floor(sec || 0))
+        const m = Math.floor(s / 60)
+        const rem = s % 60
+        if (compactTimerFormat) {
+                if (m === 0) return `${String(rem).padStart(2, '0')}s`
+                return `${m}m${String(rem).padStart(2, '0')}s`
+        }
+        return `${m}m ${String(rem).padStart(2, '0')}s`
 }
 
 async function autoScrollJobsList() {
-	const listSelectors = [
-		'.jobs-search-results-list',
-		'.jobs-search__results-list',
-		'.jobs-search-results',
-		'.jobs-search-two-pane__results-list',
-		'.jobs-search-seven-up__list',
-		'.jobs-home-jobs-module__list',
-		'.jobs-search-vertical__results-list',
-	]
-	const lists = listSelectors
-		.map((selector) => [...document.querySelectorAll(selector)])
-		.flat()
-		.filter((el, idx, arr) => el && arr.indexOf(el) === idx)
-		.filter((el) => el.scrollHeight > el.clientHeight)
+        const listSelectors = [
+                '.jobs-search-results-list',
+                '.jobs-search__results-list',
+                '.jobs-search-results',
+                '.jobs-search-two-pane__results-list',
+                '.jobs-search-seven-up__list',
+                '.jobs-home-jobs-module__list',
+                '.jobs-search-vertical__results-list',
+        ]
+        const lists = listSelectors
+                .map((selector) => [...document.querySelectorAll(selector)])
+                .flat()
+                .filter((el, idx, arr) => el && arr.indexOf(el) === idx)
+                .filter((el) => el.scrollHeight > el.clientHeight)
 
-	if (!lists.length) {
-		window.scrollBy(0, 800)
-		await randomDelay(600, 1000)
-		return
-	}
+        if (!lists.length) {
+                window.scrollBy(0, 800)
+                await randomDelay(600, 1000)
+                return
+        }
 
-	console.log('🔄 Auto-scrolling job list...')
-	for (const list of lists) {
-		for (let i = 0; i < 8; i++) {
-			list.scrollBy({ top: 800, behavior: 'smooth' })
-			await randomDelay(600, 1100)
-		}
-	}
+        console.log('🔄 Auto-scrolling job list...')
+        for (const list of lists) {
+                for (let i = 0; i < 8; i++) {
+                        list.scrollBy({ top: 800, behavior: 'smooth' })
+                        await randomDelay(600, 1100)
+                }
+        }
 }
 
 function getSkillEntries() {
-	if (!userData.skills) return []
-	if (Array.isArray(userData.skills)) return userData.skills.filter((s) => s && s.name)
-	if (typeof userData.skills === 'string') {
-		return userData.skills
-			.split(',')
-			.map((name) => name.trim())
-			.filter(Boolean)
-			.map((name) => ({ name, hasSkill: true }))
-	}
-	return []
+        if (!userData.skills) return []
+        if (Array.isArray(userData.skills)) return userData.skills.filter((s) => s && s.name)
+        if (typeof userData.skills === 'string') {
+                return userData.skills
+                        .split(',')
+                        .map((name) => name.trim())
+                        .filter(Boolean)
+                        .map((name) => ({ name, hasSkill: true }))
+        }
+        return []
 }
 
 function getSkillSummary() {
-	const entries = getSkillEntries()
-	if (!entries.length) return ''
-	return entries
-		.map((entry) => {
-			const exp = entry.experience ? ` (${entry.experience} yrs)` : ''
-			return `${entry.name}${exp}`
-		})
-		.join(', ')
+        const entries = getSkillEntries()
+        if (!entries.length) return ''
+        return entries
+                .map((entry) => {
+                        const exp = entry.experience ? ` (${entry.experience} yrs)` : ''
+                        return `${entry.name}${exp}`
+                })
+                .join(', ')
 }
 
 async function pushStatsUpdate({ isRunning }) {
-	const { appliedCount = 0, skippedCount = 0, failedCount = 0 } = await chrome.storage.local.get([
-		'appliedCount',
-		'skippedCount',
-		'failedCount',
-	])
-	try {
-		await chrome.runtime.sendMessage({
-			action: 'updateStats',
-			applied: appliedCount,
-			skipped: skippedCount,
-			failed: failedCount,
-			isRunning,
-		})
-	} catch (err) {
-		console.debug('Stats update failed:', err)
-	}
+        const { appliedCount = 0, skippedCount = 0, failedCount = 0 } = await chrome.storage.local.get([
+                'appliedCount',
+                'skippedCount',
+                'failedCount',
+        ])
+        try {
+                await chrome.runtime.sendMessage({
+                        action: 'updateStats',
+                        applied: appliedCount,
+                        skipped: skippedCount,
+                        failed: failedCount,
+                        isRunning,
+                })
+        } catch (err) {
+                console.debug('Stats update failed:', err)
+        }
 }
 
 // Ensure helper CSS for badges/animations is injected once
 function ensureInjectedStyles() {
-	try {
-		if (document.getElementById('li-auto-apply-styles')) return
-		const css = `
-		.pulse { animation: li-auto-pulse 1.1s ease-in-out infinite; }
-		@keyframes li-auto-pulse { 0% { transform: scale(1); } 50% { transform: scale(1.03); } 100% { transform: scale(1); } }
-		.li-auto-apply-statuslabel { font-family: Arial, Helvetica, sans-serif; }
-		.li-auto-apply__timer.ring { box-sizing: border-box; }
-		`
-		const s = document.createElement('style')
-		s.id = 'li-auto-apply-styles'
-		s.textContent = css
-			(document.head || document.documentElement).appendChild(s)
-	} catch (e) {
-		console.debug('ensureInjectedStyles error', e)
-	}
+        try {
+                if (document.getElementById('li-auto-apply-styles')) return
+                const css = `
+                .pulse { animation: li-auto-pulse 1.1s ease-in-out infinite; }
+                @keyframes li-auto-pulse { 0% { transform: scale(1); } 50% { transform: scale(1.03); } 100% { transform: scale(1); } }
+                .li-auto-apply-statuslabel { font-family: Arial, Helvetica, sans-serif; }
+                .li-auto-apply__timer.ring { box-sizing: border-box; }
+                `
+                const s = document.createElement('style')
+                s.id = 'li-auto-apply-styles'
+                s.textContent = css
+                        (document.head || document.documentElement).appendChild(s)
+        } catch (e) {
+                console.debug('ensureInjectedStyles error', e)
+        }
 }
 
 // Listen for messages from the popup to start/stop/update settings
 try {
-	chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-		try {
-			if (!msg || !msg.action) return
-			if (msg.action === 'startAutoApply') {
-				userData = msg.userData || userData || {}
-				const settings = msg.settings || {}
-				perJobRingTimers = !!settings.perJobRing
-				compactTimerFormat = !!settings.compactTimer
-				ensureInjectedStyles()
-				convertExistingBadges && convertExistingBadges(perJobRingTimers)
-				if (!isRunning) {
-					isRunning = true
-					startContentRunTimer()
-					// start processing asynchronously so we return quickly
-					setTimeout(() => {
-						startProcessing().catch((e) => console.debug('startProcessing error', e))
-					}, 50)
-				}
-				try { sendResponse && sendResponse({ status: 'started' }) } catch (e) { }
-				return
-			}
-			if (msg.action === 'stopAutoApply') {
-				isRunning = false
-				try { cleanupJobUI() } catch (e) { }
-				stopContentRunTimer()
-				pushStatsUpdate({ isRunning: false }).catch(() => { })
-				try { sendResponse && sendResponse({ status: 'stopped' }) } catch (e) { }
-				return
-			}
-			if (msg.action === 'updateSettings') {
-				const s = msg.settings || {}
-				perJobRingTimers = !!s.perJobRing
-				compactTimerFormat = !!s.compactTimer
-				ensureInjectedStyles()
-				convertExistingBadges && convertExistingBadges(perJobRingTimers)
-				try { sendResponse && sendResponse({ status: 'ok' }) } catch (e) { }
-				return
-			}
-		} catch (e) {
-			console.debug('content onMessage handler error', e)
-		}
-	})
+        chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+                try {
+                        if (!msg || !msg.action) return
+                        if (msg.action === 'startAutoApply') {
+                                userData = msg.userData || userData || {}
+                                const settings = msg.settings || {}
+                                perJobRingTimers = !!settings.perJobRing
+                                compactTimerFormat = !!settings.compactTimer
+                                ensureInjectedStyles()
+                                convertExistingBadges && convertExistingBadges(perJobRingTimers)
+                                if (!isRunning) {
+                                        isRunning = true
+                                        startContentRunTimer()
+                                        // start processing asynchronously so we return quickly
+                                        setTimeout(() => {
+                                                startProcessing().catch((e) => console.debug('startProcessing error', e))
+                                        }, 50)
+                                }
+                                try { sendResponse && sendResponse({ status: 'started' }) } catch (e) { }
+                                return
+                        }
+                        if (msg.action === 'stopAutoApply') {
+                                isRunning = false
+                                try { cleanupJobUI() } catch (e) { }
+                                stopContentRunTimer()
+                                pushStatsUpdate({ isRunning: false }).catch(() => { })
+                                try { sendResponse && sendResponse({ status: 'stopped' }) } catch (e) { }
+                                return
+                        }
+                        if (msg.action === 'updateSettings') {
+                                const s = msg.settings || {}
+                                perJobRingTimers = !!s.perJobRing
+                                compactTimerFormat = !!s.compactTimer
+                                ensureInjectedStyles()
+                                convertExistingBadges && convertExistingBadges(perJobRingTimers)
+                                try { sendResponse && sendResponse({ status: 'ok' }) } catch (e) { }
+                                return
+                        }
+                } catch (e) {
+                        console.debug('content onMessage handler error', e)
+                }
+        })
 } catch (e) {
-	console.debug('Failed to attach chrome.runtime.onMessage listener:', e)
+        console.debug('Failed to attach chrome.runtime.onMessage listener:', e)
 }
