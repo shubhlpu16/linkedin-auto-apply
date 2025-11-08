@@ -43,6 +43,36 @@ Browser Extension (Chrome Manifest V3)
 - All data stored locally in Chrome storage
 - Requires Chrome browser to load and test
 
+## How to Use This Extension
+
+### In Replit:
+This project serves a documentation page at the preview URL that explains how to install the extension.
+
+### To Install in Chrome:
+1. Download or clone this repository to your local machine
+2. Open Chrome and go to `chrome://extensions/`
+3. Enable "Developer mode" (toggle in top-right)
+4. Click "Load unpacked" and select this folder
+5. The extension will appear in your Chrome toolbar
+
+### Configuration:
+1. Click the extension icon in Chrome
+2. Fill in your profile (name, email, phone, skills)
+3. Save your profile
+4. Navigate to linkedin.com/jobs
+5. Start the auto-apply process
+
+## Files Structure
+- `manifest.json` - Extension configuration (Manifest V3)
+- `popup.html/js/css` - Side panel UI and controls
+- `content.js` - Main automation script (runs on LinkedIn pages)
+- `background.js` - Service worker for extension lifecycle
+- `icon*.png` - Extension icons (16, 48, 128px)
+- `index.html` - Documentation page (served on Replit)
+- `README.md` - Detailed usage instructions
+
 ## Recent Changes
-- **2025-01-08**: Initial import from GitHub
-- Project structure documented for Replit environment
+- **2025-11-08**: Initial import from GitHub and Replit setup complete
+- Created documentation server to display installation instructions
+- Validated all extension files (manifest.json, JS files, icons)
+- Project ready for Chrome installation
