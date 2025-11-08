@@ -63,16 +63,24 @@ This project serves a documentation page at the preview URL that explains how to
 5. Start the auto-apply process
 
 ## Files Structure
-- `manifest.json` - Extension configuration (Manifest V3)
-- `popup.html/js/css` - Side panel UI and controls
-- `content.js` - Main automation script (runs on LinkedIn pages)
-- `background.js` - Service worker for extension lifecycle
-- `icon*.png` - Extension icons (16, 48, 128px)
+- `extension/` - Chrome extension folder (load this in Chrome)
+  - `manifest.json` - Extension configuration (Manifest V3)
+  - `popup.html/js/css` - Side panel UI and controls
+  - `content.js` - Main automation script (runs on LinkedIn pages)
+  - `background.js` - Service worker for extension lifecycle
+  - `icon*.png` - Extension icons (16, 48, 128px)
 - `index.html` - Documentation page (served on Replit)
 - `README.md` - Detailed usage instructions
 
 ## Recent Changes
-- **2025-11-08**: Initial import from GitHub and Replit setup complete
-- Created documentation server to display installation instructions
-- Validated all extension files (manifest.json, JS files, icons)
-- Project ready for Chrome installation
+- **2025-11-08**: Major updates and fixes
+  - Fixed "no easy apply jobs found" issue - now processes ALL jobs sequentially
+  - Removed pre-counting, checks Easy Apply availability per job dynamically
+  - Added visual features: job card highlighting, status badges, per-job timers
+  - Per-job timers show elapsed time (counting UP) with ⏱️ indicator
+  - Progress display shows "Job X/Y (Z%) | ✅ N Easy Apply"
+  - All timers stop properly when user clicks stop
+  - Improved form filling: better detection of name, phone, email, skills, yes/no, experience fields
+  - Fixed circular timer warning in popup when paused
+  - Moved all extension files to `extension/` folder for better organization
+  - Sequential processing: properly skips invalid jobs and continues to next

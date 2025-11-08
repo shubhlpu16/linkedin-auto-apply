@@ -172,24 +172,22 @@ async function startProcessing() {
         currentJobIndex = 0
         currentPage = 1
         currentJobNumber = 0
+        totalEasyApplyJobs = 0
         limitNotified = false
         await pushStatsUpdate({ isRunning: true })
         await randomDelay()
         await autoScrollJobsList()
         await collectJobCards()
         
-        // Count Easy Apply jobs and show toast if none found
-        totalEasyApplyJobs = await countEasyApplyJobs()
-        console.log(`📊 Found ${totalEasyApplyJobs} Easy Apply jobs out of ${jobCards.length} total jobs`)
-        
-        if (totalEasyApplyJobs === 0) {
-                showToast('⚠️ No Easy Apply jobs found. Stopping auto-apply.', 'error')
+        if (jobCards.length === 0) {
+                showToast('⚠️ No jobs found on this page.', 'error')
                 isRunning = false
                 await pushStatsUpdate({ isRunning: false })
                 return
         }
         
-        showToast(`🚀 Starting auto-apply on ${totalEasyApplyJobs} Easy Apply jobs`, 'success')
+        console.log(`📊 Found ${jobCards.length} total jobs to process`)
+        showToast(`🚀 Processing ${jobCards.length} jobs...`, 'success')
         await processNextJob()
 }
 
@@ -297,7 +295,11 @@ async function processNextJob() {
         const jobCard = jobCards[currentJobIndex++]
         const jobId = getJobIdFromElement(jobCard)
 
-        if (!jobId || processedJobs.has(jobId)) return isRunning ? processNextJob() : undefined
+        if (!jobId || processedJobs.has(jobId)) {
+                if (!isRunning) return
+                await randomDelay(200, 500)
+                return await processNextJob()
+        }
 
         // Track attempts per job and avoid infinite retries
         const attempts = jobAttempts.get(jobId) || 0
@@ -305,7 +307,9 @@ async function processNextJob() {
                 console.log(`⚠️ Job ${jobId} exceeded attempt limit, skipping`)
                 processedJobs.add(jobId)
                 await incrementSkipped()
-                return isRunning ? processNextJob() : undefined
+                if (!isRunning) return
+                await randomDelay(500, 1000)
+                return await processNextJob()
         }
         jobAttempts.set(jobId, attempts + 1)
 
@@ -330,26 +334,33 @@ async function processNextJob() {
                 console.log(`⏭️ Skipping already applied job ${jobId}`)
                 processedJobs.add(jobId)
                 markJobStatus(jobCard, 'applied')
+                jobTimer.clear()
                 await incrementSkipped()
-                return isRunning ? processNextJob() : undefined
+                if (!isRunning) return
+                await randomDelay(500, 1000)
+                return await processNextJob()
         }
 
         // Wait for detail pane to load, then find Easy Apply button GLOBALLY
         await randomDelay(1000, 1500)
         const easyApplyButton = findEasyApplyButton()
         if (!easyApplyButton) {
-                console.log(`🚫 No Easy Apply found for job ${jobId}`)
+                console.log(`🚫 No Easy Apply found for job ${jobId} [${currentJobIndex}/${jobCards.length}]`)
                 processedJobs.add(jobId)
                 markJobStatus(jobCard, 'skipped')
+                jobTimer.clear()
                 await incrementSkipped()
-                return isRunning ? processNextJob() : undefined
+                if (!isRunning) return
+                await randomDelay(500, 1000)
+                return await processNextJob()
         }
 
-        // Update progress counter
+        // Found Easy Apply - increment counter and show progress
+        totalEasyApplyJobs++
         currentJobNumber++
-        const progressMsg = totalEasyApplyJobs > 0 ? `[${currentJobNumber}/${totalEasyApplyJobs}]` : `[${currentJobNumber}]`
+        const progressMsg = `[${currentJobNumber} Easy Apply] Job ${currentJobIndex}/${jobCards.length}`
         console.log(`🪄 ${progressMsg} Applying to job ${jobId}`)
-        showProgressToast(currentJobNumber, totalEasyApplyJobs)
+        showProgressToast(currentJobNumber, currentJobIndex, jobCards.length)
         try { triggerClick(easyApplyButton) } catch (e) { try { easyApplyButton.click() } catch (e2) { console.debug('click failed', e2) } }
         await randomDelay(2000, 3500)
 
@@ -359,8 +370,11 @@ async function processNextJob() {
                 console.log(`⚠️ Easy Apply modal did not appear for job ${jobId}, skipping`)
                 processedJobs.add(jobId)
                 markJobStatus(jobCard, 'skipped')
+                jobTimer.clear()
                 await incrementSkipped()
-                return isRunning ? processNextJob() : undefined
+                if (!isRunning) return
+                await randomDelay(500, 1000)
+                return await processNextJob()
         }
 
         const result = await fillApplicationForm()
@@ -761,18 +775,44 @@ function fillTextInputs(container) {
                 if (input.value) return
                 const label = getFieldLabel(input)
                 const text = label.toLowerCase()
+                const placeholder = (input.getAttribute('placeholder') || '').toLowerCase()
+                const combined = text + ' ' + placeholder
 
-                if (text.includes('phone')) setInputValue(input, userData.phone)
-                else if (text.includes('city') || text.includes('location'))
+                // Check for phone
+                if (combined.includes('phone') || combined.includes('mobile') || combined.includes('telephone')) {
+                        setInputValue(input, userData.phone)
+                }
+                // Check for location/city
+                else if (combined.includes('city') || combined.includes('location') || combined.includes('address')) {
                         setInputValue(input, userData.location)
-                else if (text.includes('linkedin'))
+                }
+                // Check for LinkedIn profile
+                else if (combined.includes('linkedin') || combined.includes('profile url')) {
                         setInputValue(input, userData.linkedinProfile)
-                else if (text.includes('year') && text.includes('experience'))
+                }
+                // Check for years of experience
+                else if ((combined.includes('year') && combined.includes('experience')) || combined.includes('years of experience')) {
                         setInputValue(input, userData.yearsExperience)
-                else if (text.includes('notice'))
+                }
+                // Check for notice period
+                else if (combined.includes('notice') || combined.includes('availability')) {
                         setInputValue(input, userData.noticePeriod)
-                else if (text.includes('name') && !text.includes('company'))
+                }
+                // Check for name (but not company name)
+                else if ((combined.includes('name') || combined.includes('full name')) && !combined.includes('company') && !combined.includes('organization')) {
                         setInputValue(input, userData.fullName)
+                }
+                // Check for first name
+                else if (combined.includes('first name')) {
+                        const firstName = (userData.fullName || '').split(' ')[0]
+                        setInputValue(input, firstName)
+                }
+                // Check for last name
+                else if (combined.includes('last name') || combined.includes('surname')) {
+                        const parts = (userData.fullName || '').split(' ')
+                        const lastName = parts.length > 1 ? parts.slice(1).join(' ') : ''
+                        setInputValue(input, lastName)
+                }
         })
 }
 
@@ -940,7 +980,7 @@ function showToast(message, type = 'info') {
         }
 }
 
-function showProgressToast(current, total) {
+function showProgressToast(easyApplyCount, currentJob, totalJobs) {
         try {
                 // Update or create progress toast (persistent)
                 let toast = document.getElementById('li-auto-apply-progress-toast')
@@ -963,27 +1003,13 @@ function showProgressToast(current, total) {
                         document.body.appendChild(toast)
                 }
                 
-                const progress = total > 0 ? ` - ${Math.round((current / total) * 100)}%` : ''
-                toast.textContent = `🎯 Processing: ${current}/${total}${progress}`
+                const percent = totalJobs > 0 ? Math.round((currentJob / totalJobs) * 100) : 0
+                toast.textContent = `🎯 Job ${currentJob}/${totalJobs} (${percent}%) | ✅ ${easyApplyCount} Easy Apply`
         } catch (e) {
                 console.debug('showProgressToast error', e)
         }
 }
 
-async function countEasyApplyJobs() {
-        let count = 0
-        // Quick scan of current job cards for Easy Apply indicators
-        for (const card of jobCards) {
-                try {
-                        const text = (card.innerText || '').toLowerCase()
-                        // Look for Easy Apply text in job card
-                        if (text.includes('easy apply')) {
-                                count++
-                        }
-                } catch (e) { }
-        }
-        return count
-}
 
 function jobCardHasDisqualifier(card) {
         if (!card) return true
@@ -1486,11 +1512,23 @@ function stopContentRunTimer() {
                         contentRunBadge.remove()
                         contentRunBadge = null
                 }
+                // Stop all per-job timers
+                if (window.__liAutoApplyTimers && window.__liAutoApplyTimers.length > 0) {
+                        window.__liAutoApplyTimers.forEach(id => {
+                                try { clearInterval(id) } catch (e) { }
+                        })
+                        window.__liAutoApplyTimers = []
+                }
+                // Remove progress toast
+                try {
+                        const progressToast = document.getElementById('li-auto-apply-progress-toast')
+                        if (progressToast) progressToast.remove()
+                } catch (e) { }
         } catch (e) {
                 console.debug('Error stopping content run timer:', e)
         }
 }
-function attachTimerToJob(card, seconds, onTimeout) {
+function attachTimerToJob(card, maxSeconds, onTimeout) {
         if (!card) return { clear: () => { } }
         // create either a small ring badge or a textual badge depending on settings
         let badge = card.querySelector('.li-auto-apply__timer')
@@ -1500,34 +1538,53 @@ function attachTimerToJob(card, seconds, onTimeout) {
                 try { if (!card.style.position) card.style.position = 'relative' } catch (e) { }
                 if (perJobRingTimers) {
                         // place ring on the left to avoid overlapping with status label
-                        badge.style.cssText = 'position:absolute;left:8px;top:8px;width:40px;height:40px;border-radius:50%;border:4px solid rgba(255,255,255,0.06);background:rgba(0,0,0,0.35);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;line-height:1;text-align:center;z-index:9999'
+                        badge.style.cssText = 'position:absolute;left:8px;top:8px;width:40px;height:40px;border-radius:50%;border:4px solid rgba(102,126,234,0.2);background:rgba(102,126,234,0.9);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;line-height:1;text-align:center;z-index:9999;font-weight:bold'
                         badge.classList.add('ring')
-                        badge.innerHTML = '<span class="li-job-text" style="pointer-events:none">' + formatTimer(seconds) + '</span>'
+                        badge.innerHTML = '<span class="li-job-text" style="pointer-events:none">0:00</span>'
                 } else {
-                        // textual badge placed top-left when not ring (keeps layout balanced)
-                        badge.style.cssText = 'position:absolute;left:8px;top:8px;padding:4px 6px;border-radius:6px;background:rgba(0,0,0,0.65);color:#fff;font-size:12px;z-index:9999'
-                        badge.textContent = formatTimer(seconds)
+                        // textual badge placed top-left showing elapsed time
+                        badge.style.cssText = 'position:absolute;left:8px;top:8px;padding:4px 8px;border-radius:6px;background:rgba(102,126,234,0.95);color:#fff;font-size:12px;z-index:9999;font-weight:600'
+                        badge.textContent = '⏱️ 0:00'
                 }
                 card.appendChild(badge)
         }
-        let remaining = seconds
+        let elapsed = 0
         const id = setInterval(() => {
-                remaining -= 1
-                if (remaining <= 0) {
+                elapsed += 1
+                // Show elapsed time
+                const timeText = formatTimer(elapsed)
+                if (perJobRingTimers) {
+                        const span = badge.querySelector('.li-job-text')
+                        if (span) span.textContent = timeText
+                        else badge.textContent = timeText
+                } else {
+                        badge.textContent = '⏱️ ' + timeText
+                }
+                // Check timeout
+                if (elapsed >= maxSeconds) {
                         clearInterval(id)
-                        try { badge.remove() } catch (e) { }
+                        badge.style.background = 'rgba(239,68,68,0.95)' // Red for timeout
+                        setTimeout(() => {
+                                try { badge.remove() } catch (e) { }
+                        }, 2000)
                         if (typeof onTimeout === 'function') onTimeout()
                         return
                 }
-                if (perJobRingTimers) {
-                        const span = badge.querySelector('.li-job-text')
-                        if (span) span.textContent = formatTimer(remaining)
-                        else badge.textContent = formatTimer(remaining)
-                } else {
-                        badge.textContent = formatTimer(remaining)
-                }
         }, 1000)
-        return { clear: () => { clearInterval(id); try { badge.remove() } catch (e) { } } }
+        // Store in global array so we can stop all timers
+        if (!window.__liAutoApplyTimers) window.__liAutoApplyTimers = []
+        window.__liAutoApplyTimers.push(id)
+        return { 
+                clear: () => { 
+                        clearInterval(id)
+                        try { 
+                                badge.remove()
+                                // Remove from global array
+                                const idx = window.__liAutoApplyTimers?.indexOf(id)
+                                if (idx > -1) window.__liAutoApplyTimers.splice(idx, 1)
+                        } catch (e) { }
+                } 
+        }
 }
 
 // JOB CARD UI HELPERS: visual label + background for status
@@ -1552,11 +1609,13 @@ function markJobStatus(card, status) {
         if (status === 'processing') {
                 card.classList.add('li-auto-apply--processing')
                 try {
-                        card.style.transition = 'background-color 300ms ease'
-                        card.style.backgroundColor = 'rgba(255, 223, 93, 0.12)'
+                        card.style.transition = 'all 300ms ease'
+                        card.style.backgroundColor = 'rgba(102, 126, 234, 0.15)'
+                        card.style.border = '2px solid rgba(102, 126, 234, 0.6)'
+                        card.style.boxShadow = '0 0 20px rgba(102, 126, 234, 0.4)'
                         statusLabel.textContent = 'Applying…'
-                        statusLabel.style.background = 'linear-gradient(90deg, rgba(255,223,93,0.98), rgba(255,180,50,0.95))'
-                        statusLabel.style.color = '#111'
+                        statusLabel.style.background = 'linear-gradient(90deg, rgba(102,126,234,0.98), rgba(118,75,162,0.95))'
+                        statusLabel.style.color = '#fff'
                         // add pulsing animation
                         statusLabel.classList.add('pulse')
                 } catch (e) { }

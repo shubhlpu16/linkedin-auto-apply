@@ -13,13 +13,13 @@ A Chrome extension that automatically applies to LinkedIn jobs using the Easy Ap
 ## Installation
 
 ### Step 1: Download the Extension
-Download all the extension files from this project to a folder on your computer.
+Download the `extension` folder from this project to your computer.
 
 ### Step 2: Load in Chrome
 1. Open Chrome and navigate to `chrome://extensions/`
 2. Enable "Developer mode" (toggle in top-right corner)
 3. Click "Load unpacked"
-4. Select the folder containing the extension files
+4. Select the `extension` folder
 5. The LinkedIn Auto Apply extension should now appear in your extensions list
 
 ### Step 3: Pin the Extension (Optional)
