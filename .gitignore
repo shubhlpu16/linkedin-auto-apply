@@ -1,0 +1,9 @@
+.replit
+replit.nix
+.config/
+.cache/
+.upm/
+node_modules/
+.env
+*.log
+.DS_Store
