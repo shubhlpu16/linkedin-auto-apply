@@ -80,6 +80,14 @@ This project serves a documentation page at the preview URL that explains how to
 - **Purpose**: Provides a web-based documentation page explaining how to install the Chrome extension
 
 ## Recent Changes
+- **2025-11-10**: Fixed Easy Apply Detection & Job Filtering
+  - **CRITICAL FIX: Easy Apply detection too strict**: Now accepts "Apply" buttons that aren't "Applied" status
+  - **CRITICAL FIX: Job filtering**: Removed overly aggressive filters (promoted jobs, expired text checks)
+  - **IMPROVED: Only filter truly applied jobs**: Checks footer for "Applied on" status specifically
+  - **UI FIX: Tab separation**: Profile tab shows only profile, History tab shows only history
+  - **UI FIX: History styling**: Enhanced visual design with better stats, table, and hover effects
+  - **PERSISTENCE: History storage**: Properly persists in chrome.storage.local (won't be lost)
+
 - **2025-11-10**: Foolproof Status Detection & First Job Fix
   - **DETECTION FIX: Easy Apply button**: Now prioritizes #jobs-apply-button element with span content validation for most reliable detection
   - **DETECTION FIX: Success verification**: Uses #jobs-apply-see-application-link as primary indicator of successful application

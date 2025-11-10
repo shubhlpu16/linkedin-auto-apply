@@ -112,11 +112,15 @@ function findEasyApplyButton() {
                 const ariaLabel = (btn.getAttribute && btn.getAttribute('aria-label') || '').toLowerCase().trim()
                 const dataAttr = btn.getAttribute && btn.getAttribute('data-is-easy-apply')
                 
-                // Require explicit "easy apply" text or data attribute
+                // Accept "easy apply" OR just "apply" with easy apply data attribute
                 const hasEasyApplyText = text.includes('easy apply') || ariaLabel.includes('easy apply')
+                const hasApplyText = text.includes('apply') || ariaLabel.includes('apply')
                 const hasEasyApplyAttr = dataAttr === 'true' || dataAttr === '1'
                 
-                return hasEasyApplyText || hasEasyApplyAttr
+                // Be less strict: accept "Apply" button that's not "Applied" or "Application sent"
+                const isAppliedButton = text.includes('applied') || text.includes('application sent') || ariaLabel.includes('applied')
+                
+                return (hasEasyApplyText || (hasApplyText && !isAppliedButton) || hasEasyApplyAttr)
         }
 
         const debugInfo = { scope: 'global', triedSelectors: [], method: null, matchedSelector: null, timestamp: Date.now() }
@@ -124,7 +128,7 @@ function findEasyApplyButton() {
         // MOST RELIABLE: Check for specific LinkedIn Easy Apply button ID
         try {
                 const applyButtonById = document.getElementById('jobs-apply-button')
-                if (applyButtonById) {
+                if (applyButtonById && !applyButtonById.disabled) {
                         // Check if the span inside contains "Easy Apply"
                         const span = applyButtonById.querySelector('span')
                         const spanText = (span?.textContent || applyButtonById.textContent || '').toLowerCase().trim()
@@ -135,6 +139,8 @@ function findEasyApplyButton() {
                                 console.log('✓ Easy Apply button found via #jobs-apply-button (MOST RELIABLE)')
                                 try { window.__li_lastEasyApply = debugInfo } catch (e) { }
                                 return applyButtonById
+                        } else {
+                                console.log('⚠️ #jobs-apply-button found but span text is:', spanText)
                         }
                 }
         } catch (e) {
@@ -1178,23 +1184,26 @@ function showProgressToast(easyApplyCount, currentJob, totalJobs) {
 
 function jobCardHasDisqualifier(card) {
         if (!card) return true
-        const text = (card.innerText || '').toLowerCase()
         
-        // More specific check for "applied" status - only filter if it's explicitly marked as applied
+        // ONLY filter jobs that are explicitly marked as applied
         const hasAppliedStatus = card.querySelector('.job-card-container__footer-item--highlighted, .job-card-container__applied-date, [data-test-job-card-footer-applied]')
-        if (hasAppliedStatus) return true
-        
-        // Check for other disqualifiers
-        if (
-                /no longer accepting|expired|not accepting applications|closed|position filled/i.test(
-                        text,
-                )
-        )
+        if (hasAppliedStatus) {
+                console.log('⏭️ Job card has applied status indicator')
                 return true
+        }
         
-        // Skip promoted jobs (optional - remove this if you want to apply to promoted jobs too)
-        const displayType = card.getAttribute('data-jobcard-displaytype') || ''
-        if (displayType.toLowerCase().includes('promoted')) return true
+        // Check for "Applied" text in footer specifically (not entire card)
+        const footer = card.querySelector('.job-card-container__footer-wrapper, .job-card-list__footer-wrapper')
+        if (footer) {
+                const footerText = (footer.innerText || '').toLowerCase()
+                if (footerText.includes('applied on') || footerText.includes('application sent')) {
+                        console.log('⏭️ Job card footer shows already applied')
+                        return true
+                }
+        }
+        
+        // REMOVED: Checking for expired/closed jobs - let LinkedIn handle this
+        // REMOVED: Skipping promoted jobs - these are valid jobs to apply to
         
         return false
 }
