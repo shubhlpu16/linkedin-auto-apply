@@ -754,5 +754,234 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // Accept linkedin jobs pages with or without www and with either http/https
                 return /^https?:\/\/(?:www\.)?linkedin\.com\/jobs\//.test(tab.url)
         }
+
+        // ================ HISTORY TAB FUNCTIONALITY ================
+        
+        const tabButtons = document.querySelectorAll('.tab-btn')
+        const tabContents = document.querySelectorAll('.tab-content')
+        const historyTableBody = document.getElementById('historyTableBody')
+        const historySearch = document.getElementById('historySearch')
+        const historyFilter = document.getElementById('historyFilter')
+        const historyTotal = document.getElementById('historyTotal')
+        const historyApplied = document.getElementById('historyApplied')
+        const historySkipped = document.getElementById('historySkipped')
+        const exportHistoryBtn = document.getElementById('exportHistoryBtn')
+        const clearHistoryBtn = document.getElementById('clearHistoryBtn')
+        const historyPrevPage = document.getElementById('historyPrevPage')
+        const historyNextPage = document.getElementById('historyNextPage')
+        const historyPageInfo = document.getElementById('historyPageInfo')
+        
+        let jobHistory = []
+        let filteredHistory = []
+        let currentPage = 1
+        const itemsPerPage = 20
+        
+        // Tab switching
+        tabButtons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                        const targetTab = btn.dataset.tab
+                        
+                        tabButtons.forEach(b => b.classList.remove('active'))
+                        tabContents.forEach(c => c.classList.remove('active'))
+                        
+                        btn.classList.add('active')
+                        document.getElementById(targetTab + 'Tab').classList.add('active')
+                        
+                        if (targetTab === 'history') {
+                                loadHistory()
+                        }
+                })
+        })
+        
+        // Load and display history
+        async function loadHistory() {
+                try {
+                        const { jobHistory: history = [] } = await chrome.storage.local.get(['jobHistory'])
+                        jobHistory = history
+                        filteredHistory = jobHistory
+                        updateHistoryStats()
+                        applyFilters()
+                } catch (e) {
+                        console.error('Failed to load history:', e)
+                }
+        }
+        
+        function updateHistoryStats() {
+                historyTotal.textContent = jobHistory.length
+                const appliedCount = jobHistory.filter(j => j.status === 'applied').length
+                const skippedCount = jobHistory.filter(j => j.status && j.status.includes('skipped')).length
+                historyApplied.textContent = appliedCount
+                historySkipped.textContent = skippedCount
+        }
+        
+        function applyFilters() {
+                const searchTerm = historySearch?.value.toLowerCase() || ''
+                const filterStatus = historyFilter?.value || 'all'
+                
+                filteredHistory = jobHistory.filter(job => {
+                        const matchesSearch = !searchTerm || 
+                                job.jobTitle.toLowerCase().includes(searchTerm) ||
+                                job.company.toLowerCase().includes(searchTerm)
+                        
+                        const matchesFilter = filterStatus === 'all' || 
+                                job.status === filterStatus ||
+                                (filterStatus === 'skipped' && job.status && job.status.includes('skipped'))
+                        
+                        return matchesSearch && matchesFilter
+                })
+                
+                currentPage = 1
+                renderHistory()
+        }
+        
+        function renderHistory() {
+                if (!historyTableBody) return
+                
+                if (filteredHistory.length === 0) {
+                        historyTableBody.innerHTML = '<tr class="history-empty"><td colspan="5">No jobs match your filters.</td></tr>'
+                        updatePagination()
+                        return
+                }
+                
+                const startIndex = (currentPage - 1) * itemsPerPage
+                const endIndex = startIndex + itemsPerPage
+                const pageJobs = filteredHistory.slice(startIndex, endIndex)
+                
+                historyTableBody.innerHTML = pageJobs.map(job => {
+                        const statusClass = getStatusClass(job.status)
+                        const statusLabel = getStatusLabel(job.status)
+                        const date = new Date(job.appliedAt || job.timestamp).toLocaleDateString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                        })
+                        
+                        return `
+                                <tr>
+                                        <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${job.jobTitle}">${job.jobTitle}</td>
+                                        <td style="max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${job.company}">${job.company}</td>
+                                        <td><span class="status-badge ${statusClass}">${statusLabel}</span></td>
+                                        <td style="white-space: nowrap;">${date}</td>
+                                        <td><a href="${job.jobLink}" class="job-link" target="_blank">View</a></td>
+                                </tr>
+                        `
+                }).join('')
+                
+                updatePagination()
+        }
+        
+        function getStatusClass(status) {
+                if (status === 'applied') return 'status-badge--applied'
+                if (status === 'failed') return 'status-badge--failed'
+                if (status === 'stopped') return 'status-badge--stopped'
+                return 'status-badge--skipped'
+        }
+        
+        function getStatusLabel(status) {
+                if (status === 'applied') return 'Applied'
+                if (status === 'failed') return 'Failed'
+                if (status === 'stopped') return 'Stopped'
+                if (status === 'already_applied') return 'Already Applied'
+                if (status === 'skipped_no_easy_apply') return 'No Easy Apply'
+                if (status === 'skipped_modal_failed') return 'Modal Failed'
+                if (status === 'skipped_load_failed') return 'Load Failed'
+                if (status === 'skipped_max_attempts') return 'Max Attempts'
+                return 'Skipped'
+        }
+        
+        function updatePagination() {
+                const totalPages = Math.ceil(filteredHistory.length / itemsPerPage)
+                historyPageInfo.textContent = `Page ${currentPage} of ${totalPages || 1}`
+                historyPrevPage.disabled = currentPage <= 1
+                historyNextPage.disabled = currentPage >= totalPages
+        }
+        
+        // Event listeners for history controls
+        if (historySearch) {
+                historySearch.addEventListener('input', applyFilters)
+        }
+        
+        if (historyFilter) {
+                historyFilter.addEventListener('change', applyFilters)
+        }
+        
+        if (historyPrevPage) {
+                historyPrevPage.addEventListener('click', () => {
+                        if (currentPage > 1) {
+                                currentPage--
+                                renderHistory()
+                        }
+                })
+        }
+        
+        if (historyNextPage) {
+                historyNextPage.addEventListener('click', () => {
+                        const totalPages = Math.ceil(filteredHistory.length / itemsPerPage)
+                        if (currentPage < totalPages) {
+                                currentPage++
+                                renderHistory()
+                        }
+                })
+        }
+        
+        // Export history to CSV
+        if (exportHistoryBtn) {
+                exportHistoryBtn.addEventListener('click', () => {
+                        if (jobHistory.length === 0) {
+                                alert('No history to export.')
+                                return
+                        }
+                        
+                        const csvContent = [
+                                ['Job Title', 'Company', 'Status', 'Date', 'Link'],
+                                ...jobHistory.map(job => [
+                                        job.jobTitle,
+                                        job.company,
+                                        getStatusLabel(job.status),
+                                        new Date(job.appliedAt || job.timestamp).toISOString(),
+                                        job.jobLink
+                                ])
+                        ].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n')
+                        
+                        const blob = new Blob([csvContent], { type: 'text/csv' })
+                        const url = URL.createObjectURL(blob)
+                        const a = document.createElement('a')
+                        a.href = url
+                        a.download = `linkedin-job-history-${new Date().toISOString().split('T')[0]}.csv`
+                        document.body.appendChild(a)
+                        a.click()
+                        document.body.removeChild(a)
+                        URL.revokeObjectURL(url)
+                })
+        }
+        
+        // Clear history
+        if (clearHistoryBtn) {
+                clearHistoryBtn.addEventListener('click', async () => {
+                        if (!confirm('Are you sure you want to clear all job history? This cannot be undone.')) {
+                                return
+                        }
+                        
+                        try {
+                                await chrome.storage.local.set({ jobHistory: [] })
+                                jobHistory = []
+                                filteredHistory = []
+                                updateHistoryStats()
+                                renderHistory()
+                                alert('History cleared successfully.')
+                        } catch (e) {
+                                console.error('Failed to clear history:', e)
+                                alert('Failed to clear history. Please try again.')
+                        }
+                })
+        }
+        
+        // Listen for history updates from content script
+        chrome.storage.onChanged.addListener((changes, areaName) => {
+                if (areaName === 'local' && changes.jobHistory) {
+                        loadHistory()
+                }
+        })
 })
 

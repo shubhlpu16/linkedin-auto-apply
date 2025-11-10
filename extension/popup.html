@@ -1,177 +1,242 @@
 <!DOCTYPE html>
 <html lang="en">
-	<head>
-		<meta charset="UTF-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>LinkedIn Auto Apply</title>
-		<link rel="stylesheet" href="popup.css" />
-	</head>
-	<body>
-		<aside class="sidebar">
-			<header class="sidebar__header">
-				<div>
-					<h1>LinkedIn Auto Apply</h1>
-					<p class="subtitle">
-						Keep this panel open while browsing LinkedIn jobs.
-					</p>
-				</div>
-				<div style="display:flex;align-items:center;gap:8px">
-					<span class="status-pill status-pill--inactive" id="statusBadge">Inactive</span>
-				</div>
-			</header>
+        <head>
+                <meta charset="UTF-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+                <title>LinkedIn Auto Apply</title>
+                <link rel="stylesheet" href="popup.css" />
+        </head>
+        <body>
+                <aside class="sidebar">
+                        <header class="sidebar__header">
+                                <div>
+                                        <h1>LinkedIn Auto Apply</h1>
+                                        <p class="subtitle">
+                                                Keep this panel open while browsing LinkedIn jobs.
+                                        </p>
+                                </div>
+                                <div style="display:flex;align-items:center;gap:8px">
+                                        <span class="status-pill status-pill--inactive" id="statusBadge">Inactive</span>
+                                </div>
+                        </header>
 
-			<section class="status-panel">
-				<div class="countdown-shell" id="countdownContainer">
-					<div class="countdown-ring" id="countdownRing" data-state="idle">
-						<div class="countdown-ring__inner">
-							<span class="countdown-ring__value" id="countdownValue">--</span>
-							<small class="countdown-ring__label" id="countdownLabel">sec</small>
-						</div>
-					</div>
-				</div>
-				<div class="status-panel__content">
-					<p class="status-panel__title" id="statusText">Inactive</p>
-					<p class="status-panel__hint" id="statusHint">
-						Fill your profile and hit start when you’re ready.
-					</p>
-					<div class="status-panel__actions">
-						<button id="resumeNowBtn" class="btn btn-outline" disabled>
-							Resume Auto Apply
-						</button>
-						<button id="pauseBtn" class="btn btn-muted" disabled>
-							Pause Auto Apply
-						</button>
-					</div>
-				</div>
-			</section>
+                        <section class="status-panel">
+                                <div class="countdown-shell" id="countdownContainer">
+                                        <div class="countdown-ring" id="countdownRing" data-state="idle">
+                                                <div class="countdown-ring__inner">
+                                                        <span class="countdown-ring__value" id="countdownValue">--</span>
+                                                        <small class="countdown-ring__label" id="countdownLabel">sec</small>
+                                                </div>
+                                        </div>
+                                </div>
+                                <div class="status-panel__content">
+                                        <p class="status-panel__title" id="statusText">Inactive</p>
+                                        <p class="status-panel__hint" id="statusHint">
+                                                Fill your profile and hit start when you’re ready.
+                                        </p>
+                                        <div class="status-panel__actions">
+                                                <button id="resumeNowBtn" class="btn btn-outline" disabled>
+                                                        Resume Auto Apply
+                                                </button>
+                                                <button id="pauseBtn" class="btn btn-muted" disabled>
+                                                        Pause Auto Apply
+                                                </button>
+                                        </div>
+                                </div>
+                        </section>
 
-			<section class="controls">
-				<div class="controls__primary">
-					<button id="startBtn" class="btn btn-primary btn-lg">
-						<span class="btn__spinner" aria-hidden="true"></span>
-						<span class="btn__label">Start Auto Apply</span>
-					</button>
-					<button id="stopBtn" class="btn btn-ghost" disabled>Stop</button>
-					<!-- Reset (moved here) -->
-                			<button id="resetBtn" title="Reset extension" class="btn btn-ghost" style="padding:8px 10px; margin-left:6px; font-size:18px; line-height:1">⟲</button>
-				</div>
-				<div class="controls__stats">
-					<div class="stat-card">
-						<span class="stat-card__label">Applied</span>
-						<span class="stat-card__value" id="appliedCount">0</span>
-					</div>
-					<div class="controls__settings" style="margin-top:10px;display:flex;flex-direction:column;gap:6px">
-						<label style="display:flex;align-items:center;gap:8px">
-							<input type="checkbox" id="compactTimerToggle" />
-							<span>Compact timer format (e.g. 05s)</span>
-						</label>
-						<label style="display:flex;align-items:center;gap:8px">
-							<input type="checkbox" id="perJobRingToggle" />
-							<span>Per-job ring timers</span>
-						</label>
-					</div>
-					<div class="stat-card">
-						<span class="stat-card__label">Skipped</span>
-						<span class="stat-card__value" id="skippedCount">0</span>
-					</div>
-					<div class="stat-card">
-						<span class="stat-card__label">Running time</span>
-						<span class="stat-card__value" id="runTimer">--</span>
-					</div>
-				</div>
-			</section>
+                        <section class="controls">
+                                <div class="controls__primary">
+                                        <button id="startBtn" class="btn btn-primary btn-lg">
+                                                <span class="btn__spinner" aria-hidden="true"></span>
+                                                <span class="btn__label">Start Auto Apply</span>
+                                        </button>
+                                        <button id="stopBtn" class="btn btn-ghost" disabled>Stop</button>
+                                        <!-- Reset (moved here) -->
+                                        <button id="resetBtn" title="Reset extension" class="btn btn-ghost" style="padding:8px 10px; margin-left:6px; font-size:18px; line-height:1">⟲</button>
+                                </div>
+                                <div class="controls__stats">
+                                        <div class="stat-card">
+                                                <span class="stat-card__label">Applied</span>
+                                                <span class="stat-card__value" id="appliedCount">0</span>
+                                        </div>
+                                        <div class="controls__settings" style="margin-top:10px;display:flex;flex-direction:column;gap:6px">
+                                                <label style="display:flex;align-items:center;gap:8px">
+                                                        <input type="checkbox" id="compactTimerToggle" />
+                                                        <span>Compact timer format (e.g. 05s)</span>
+                                                </label>
+                                                <label style="display:flex;align-items:center;gap:8px">
+                                                        <input type="checkbox" id="perJobRingToggle" />
+                                                        <span>Per-job ring timers</span>
+                                                </label>
+                                        </div>
+                                        <div class="stat-card">
+                                                <span class="stat-card__label">Skipped</span>
+                                                <span class="stat-card__value" id="skippedCount">0</span>
+                                        </div>
+                                        <div class="stat-card">
+                                                <span class="stat-card__label">Running time</span>
+                                                <span class="stat-card__value" id="runTimer">--</span>
+                                        </div>
+                                </div>
+                        </section>
 
-			<section class="form-section">
-				<div class="section-header">
-					<h2>Your Application Profile</h2>
-					<button id="saveSettings" class="btn btn-outline">Save Profile</button>
-				</div>
-				<div class="form-grid">
-					<div class="form-field">
-						<label for="fullName">Full Name *</label>
-						<input type="text" id="fullName" placeholder="John Doe" />
-					</div>
-					<div class="form-field">
-						<label for="email">Email *</label>
-						<input type="email" id="email" placeholder="john@example.com" />
-					</div>
-					<div class="form-field">
-						<label for="phone">Phone Number *</label>
-						<input type="tel" id="phone" placeholder="+1 (555) 123-4567" />
-					</div>
-					<div class="form-field">
-						<label for="location">Location / City</label>
-						<input type="text" id="location" placeholder="New York, NY" />
-					</div>
-					<div class="form-field">
-						<label for="linkedinProfile">LinkedIn Profile URL</label>
-						<input
-							type="url"
-							id="linkedinProfile"
-							placeholder="https://linkedin.com/in/yourprofile"
-						/>
-					</div>
-					<div class="form-field">
-						<label for="yearsExperience">Years of Experience</label>
-						<input type="number" id="yearsExperience" placeholder="5" min="0" />
-					</div>
-					<div class="form-field">
-						<label for="currentCompany">Current Company</label>
-						<input type="text" id="currentCompany" placeholder="ABC Corp" />
-					</div>
-					<div class="form-field">
-						<label for="currentTitle">Current Job Title</label>
-						<input
-							type="text"
-							id="currentTitle"
-							placeholder="Software Engineer"
-						/>
-					</div>
-					<div class="form-field">
-						<label for="noticePeriod">Notice Period (days)</label>
-						<input type="number" id="noticePeriod" placeholder="30" min="0" />
-					</div>
-					<div class="form-field">
-						<label for="workAuthorization">Work Authorization</label>
-						<select id="workAuthorization">
-							<option value="">Select...</option>
-							<option value="yes">Authorized to work</option>
-							<option value="no">Require sponsorship</option>
-						</select>
-					</div>
-				</div>
-				<div class="skills-block">
-					<div class="skills-header">
-						<h3>Key Skills</h3>
-						<button type="button" id="addSkillBtn" class="btn btn-secondary">
-							Add Skill
-						</button>
-					</div>
-					<div id="skillsContainer" class="skills-container"></div>
-					<p class="hint">
-						Skills help answer recruiter questions automatically.
-					</p>
-				</div>
-				<p class="hint">* Required fields</p>
-			</section>
+                        <nav class="tabs">
+                                <button class="tab-btn active" data-tab="profile">Profile</button>
+                                <button class="tab-btn" data-tab="history">History</button>
+                        </nav>
 
-			<section class="tips">
-				<h3>Workflow Tips</h3>
-				<ul>
-					<li>Open LinkedIn job search in a focused tab before starting.</li>
-					<li>Keep this assistant pinned so progress stays visible.</li>
-					<li>Pause when extra details are required, then resume.</li>
-				</ul>
-			</section>
+                        <section class="form-section tab-content active" id="profileTab">
+                                <div class="section-header">
+                                        <h2>Your Application Profile</h2>
+                                        <button id="saveSettings" class="btn btn-outline">Save Profile</button>
+                                </div>
+                                <div class="form-grid">
+                                        <div class="form-field">
+                                                <label for="fullName">Full Name *</label>
+                                                <input type="text" id="fullName" placeholder="John Doe" />
+                                        </div>
+                                        <div class="form-field">
+                                                <label for="email">Email *</label>
+                                                <input type="email" id="email" placeholder="john@example.com" />
+                                        </div>
+                                        <div class="form-field">
+                                                <label for="phone">Phone Number *</label>
+                                                <input type="tel" id="phone" placeholder="+1 (555) 123-4567" />
+                                        </div>
+                                        <div class="form-field">
+                                                <label for="location">Location / City</label>
+                                                <input type="text" id="location" placeholder="New York, NY" />
+                                        </div>
+                                        <div class="form-field">
+                                                <label for="linkedinProfile">LinkedIn Profile URL</label>
+                                                <input
+                                                        type="url"
+                                                        id="linkedinProfile"
+                                                        placeholder="https://linkedin.com/in/yourprofile"
+                                                />
+                                        </div>
+                                        <div class="form-field">
+                                                <label for="yearsExperience">Years of Experience</label>
+                                                <input type="number" id="yearsExperience" placeholder="5" min="0" />
+                                        </div>
+                                        <div class="form-field">
+                                                <label for="currentCompany">Current Company</label>
+                                                <input type="text" id="currentCompany" placeholder="ABC Corp" />
+                                        </div>
+                                        <div class="form-field">
+                                                <label for="currentTitle">Current Job Title</label>
+                                                <input
+                                                        type="text"
+                                                        id="currentTitle"
+                                                        placeholder="Software Engineer"
+                                                />
+                                        </div>
+                                        <div class="form-field">
+                                                <label for="noticePeriod">Notice Period (days)</label>
+                                                <input type="number" id="noticePeriod" placeholder="30" min="0" />
+                                        </div>
+                                        <div class="form-field">
+                                                <label for="workAuthorization">Work Authorization</label>
+                                                <select id="workAuthorization">
+                                                        <option value="">Select...</option>
+                                                        <option value="yes">Authorized to work</option>
+                                                        <option value="no">Require sponsorship</option>
+                                                </select>
+                                        </div>
+                                </div>
+                                <div class="skills-block">
+                                        <div class="skills-header">
+                                                <h3>Key Skills</h3>
+                                                <button type="button" id="addSkillBtn" class="btn btn-secondary">
+                                                        Add Skill
+                                                </button>
+                                        </div>
+                                        <div id="skillsContainer" class="skills-container"></div>
+                                        <p class="hint">
+                                                Skills help answer recruiter questions automatically.
+                                        </p>
+                                </div>
+                                <p class="hint">* Required fields</p>
+                        </section>
 
-			<footer class="sidebar__footer">
-				<p>
-					Pro tip: Switch back to LinkedIn after you start so auto apply can keep
-					working.
-				</p>
-			</footer>
-		</aside>
+                        <section class="history-section tab-content" id="historyTab">
+                                <div class="section-header">
+                                        <h2>Job Application History</h2>
+                                        <div style="display:flex;gap:8px">
+                                                <button id="exportHistoryBtn" class="btn btn-outline btn-sm">Export CSV</button>
+                                                <button id="clearHistoryBtn" class="btn btn-ghost btn-sm">Clear All</button>
+                                        </div>
+                                </div>
+                                
+                                <div class="history-stats">
+                                        <div class="history-stat">
+                                                <span class="history-stat__label">Total Jobs</span>
+                                                <span class="history-stat__value" id="historyTotal">0</span>
+                                        </div>
+                                        <div class="history-stat">
+                                                <span class="history-stat__label">Applied</span>
+                                                <span class="history-stat__value history-stat__value--success" id="historyApplied">0</span>
+                                        </div>
+                                        <div class="history-stat">
+                                                <span class="history-stat__label">Skipped</span>
+                                                <span class="history-stat__value history-stat__value--warning" id="historySkipped">0</span>
+                                        </div>
+                                </div>
 
-		<script src="popup.js"></script>
-	</body>
+                                <div class="history-controls">
+                                        <input type="text" id="historySearch" class="history-search" placeholder="Search jobs, companies...">
+                                        <select id="historyFilter" class="history-filter">
+                                                <option value="all">All Statuses</option>
+                                                <option value="applied">Applied</option>
+                                                <option value="skipped">Skipped</option>
+                                                <option value="failed">Failed</option>
+                                        </select>
+                                </div>
+                                
+                                <div id="historyTableContainer" class="history-table-container">
+                                        <table class="history-table" id="historyTable">
+                                                <thead>
+                                                        <tr>
+                                                                <th>Job Title</th>
+                                                                <th>Company</th>
+                                                                <th>Status</th>
+                                                                <th>Date</th>
+                                                                <th>Link</th>
+                                                        </tr>
+                                                </thead>
+                                                <tbody id="historyTableBody">
+                                                        <tr class="history-empty">
+                                                                <td colspan="5">No job history yet. Start auto-applying to see results here!</td>
+                                                        </tr>
+                                                </tbody>
+                                        </table>
+                                </div>
+                                
+                                <div class="history-pagination" id="historyPagination">
+                                        <button id="historyPrevPage" class="btn btn-ghost btn-sm" disabled>&larr; Prev</button>
+                                        <span id="historyPageInfo">Page 1 of 1</span>
+                                        <button id="historyNextPage" class="btn btn-ghost btn-sm" disabled>Next &rarr;</button>
+                                </div>
+                        </section>
+
+                        <section class="tips">
+                                <h3>Workflow Tips</h3>
+                                <ul>
+                                        <li>Open LinkedIn job search in a focused tab before starting.</li>
+                                        <li>Keep this assistant pinned so progress stays visible.</li>
+                                        <li>Pause when extra details are required, then resume.</li>
+                                </ul>
+                        </section>
+
+                        <footer class="sidebar__footer">
+                                <p>
+                                        Pro tip: Switch back to LinkedIn after you start so auto apply can keep
+                                        working.
+                                </p>
+                        </footer>
+                </aside>
+
+                <script src="popup.js"></script>
+        </body>
 </html>

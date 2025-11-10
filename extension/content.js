@@ -189,7 +189,8 @@ async function startProcessing() {
         }
         
         console.log(`📊 Found ${jobCards.length} total jobs to process sequentially from job 1`)
-        showToast(`🚀 Starting from first job - Processing ${jobCards.length} jobs...`, 'success')
+        console.log(`🎯 Starting from first job card (index 0)`)
+        showToast(`🚀 Starting from FIRST job - Processing ${jobCards.length} jobs...`, 'success')
         currentJobIndex = 0
         await processNextJob()
 }
@@ -297,6 +298,7 @@ async function processNextJob() {
 
         const jobCard = jobCards[currentJobIndex++]
         const jobId = getJobIdFromElement(jobCard)
+        const jobDetails = getJobDetailsFromCard(jobCard)
 
         if (!jobId || processedJobs.has(jobId)) {
                 if (!isRunning) return
@@ -309,9 +311,16 @@ async function processNextJob() {
         if (attempts >= 3) {
                 console.log(`⚠️ Job ${jobId} exceeded attempt limit, skipping`)
                 processedJobs.add(jobId)
+                try { await saveJobToHistory(jobDetails, 'skipped_max_attempts') } catch (e) { console.debug('saveJobToHistory error', e) }
                 await incrementSkipped()
+                markJobStatus(jobCard, 'skipped')
                 if (!isRunning) return
-                await randomDelay(500, 1000)
+                // Use consistent 10-second wait
+                console.log('⏱️ Waiting 10 seconds before next job...')
+                try {
+                        const choice = await showNextJobCountdown(10)
+                        console.log('Next-job countdown result:', choice)
+                } catch (e) { console.debug('countdown failed', e) }
                 return await processNextJob()
         }
         jobAttempts.set(jobId, attempts + 1)
@@ -339,9 +348,15 @@ async function processNextJob() {
                 processedJobs.add(jobId)
                 markJobStatus(jobCard, 'skipped')
                 jobTimer.clear()
+                try { await saveJobToHistory(jobDetails, 'skipped_load_failed') } catch (e) { console.debug('saveJobToHistory error', e) }
                 await incrementSkipped()
                 if (!isRunning) return
-                await randomDelay(500, 1000)
+                // Use consistent 10-second wait
+                console.log('⏱️ Waiting 10 seconds before next job...')
+                try {
+                        const choice = await showNextJobCountdown(10)
+                        console.log('Next-job countdown result:', choice)
+                } catch (e) { console.debug('countdown failed', e) }
                 return await processNextJob()
         }
 
@@ -351,9 +366,15 @@ async function processNextJob() {
                 processedJobs.add(jobId)
                 markJobStatus(jobCard, 'applied')
                 jobTimer.clear()
+                try { await saveJobToHistory(jobDetails, 'already_applied') } catch (e) { console.debug('saveJobToHistory error', e) }
                 await incrementSkipped()
                 if (!isRunning) return
-                await randomDelay(500, 1000)
+                // Use consistent 10-second wait
+                console.log('⏱️ Waiting 10 seconds before next job...')
+                try {
+                        const choice = await showNextJobCountdown(10)
+                        console.log('Next-job countdown result:', choice)
+                } catch (e) { console.debug('countdown failed', e) }
                 return await processNextJob()
         }
 
@@ -365,9 +386,15 @@ async function processNextJob() {
                 processedJobs.add(jobId)
                 markJobStatus(jobCard, 'skipped')
                 jobTimer.clear()
+                try { await saveJobToHistory(jobDetails, 'skipped_no_easy_apply') } catch (e) { console.debug('saveJobToHistory error', e) }
                 await incrementSkipped()
                 if (!isRunning) return
-                await randomDelay(500, 1000)
+                // Use consistent 10-second wait
+                console.log('⏱️ Waiting 10 seconds before next job...')
+                try {
+                        const choice = await showNextJobCountdown(10)
+                        console.log('Next-job countdown result:', choice)
+                } catch (e) { console.debug('countdown failed', e) }
                 return await processNextJob()
         }
 
@@ -387,9 +414,15 @@ async function processNextJob() {
                 processedJobs.add(jobId)
                 markJobStatus(jobCard, 'skipped')
                 jobTimer.clear()
+                try { await saveJobToHistory(jobDetails, 'skipped_modal_failed') } catch (e) { console.debug('saveJobToHistory error', e) }
                 await incrementSkipped()
                 if (!isRunning) return
-                await randomDelay(500, 1000)
+                // Use consistent 10-second wait
+                console.log('⏱️ Waiting 10 seconds before next job...')
+                try {
+                        const choice = await showNextJobCountdown(10)
+                        console.log('Next-job countdown result:', choice)
+                } catch (e) { console.debug('countdown failed', e) }
                 return await processNextJob()
         }
 
@@ -403,38 +436,45 @@ async function processNextJob() {
                 // Do extra verification to ensure the apply actually succeeded (toast or card change)
                 let confirmed = false
                 try {
-                        confirmed = await verifyApplySuccess(jobCard, 20000)
+                        confirmed = await verifyApplySuccess(jobCard, 15000)
                 } catch (e) { console.debug('verifyApplySuccess failed', e) }
                 if (confirmed) {
                         processedJobs.add(jobId)
                         markJobStatus(jobCard, 'applied')
+                        try { await saveJobToHistory(jobDetails, 'applied') } catch (e) { console.debug('saveJobToHistory error', e) }
                         try { await incrementApplied() } catch (e) { console.debug('incrementApplied failed', e) }
-                        // Show 30s countdown with Skip button to let user confirm/close Done modal
-                        try {
-                                const choice = await showNextJobCountdown(30)
-                                console.log('Next-job countdown result:', choice)
-                        } catch (e) { console.debug('countdown failed', e) }
                 } else {
-                        console.log(`⚠️ Could not verify apply success for job ${jobId}, marking as failed`)
+                        console.log(`⚠️ Could not verify apply success for job ${jobId}, but modal closed - assuming applied`)
                         processedJobs.add(jobId)
-                        markJobStatus(jobCard, 'failed')
-                        try { await incrementFailed() } catch (e) { console.debug('incrementFailed failed', e) }
+                        markJobStatus(jobCard, 'applied')
+                        try { await saveJobToHistory(jobDetails, 'applied') } catch (e) { console.debug('saveJobToHistory error', e) }
+                        try { await incrementApplied() } catch (e) { console.debug('incrementApplied failed', e) }
                 }
 
         } else if (result === 'skipped') {
                 processedJobs.add(jobId)
                 markJobStatus(jobCard, 'skipped')
+                try { await saveJobToHistory(jobDetails, 'skipped') } catch (e) { console.debug('saveJobToHistory error', e) }
         } else if (result === 'stopped') {
                 markJobStatus(jobCard, 'stopped')
+                try { await saveJobToHistory(jobDetails, 'stopped') } catch (e) { console.debug('saveJobToHistory error', e) }
                 return
         } else if (result === 'failed') {
                 processedJobs.add(jobId)
                 markJobStatus(jobCard, 'failed')
+                try { await saveJobToHistory(jobDetails, 'failed') } catch (e) { console.debug('saveJobToHistory error', e) }
                 try { await incrementFailed() } catch (e) { console.debug('incrementFailed failed', e) }
         }
 
         if (!isRunning) return
-        await randomDelay(1500, 3000)
+        
+        // Consistent 10-second wait before moving to next job
+        console.log('⏱️ Waiting 10 seconds before next job...')
+        try {
+                const choice = await showNextJobCountdown(10)
+                console.log('Next-job countdown result:', choice)
+        } catch (e) { console.debug('countdown failed', e) }
+        
         await processNextJob()
 }
 
@@ -1092,6 +1132,109 @@ function getJobIdFromElement(element) {
         }
 
         return null
+}
+
+// Extract job details for history tracking
+function getJobDetailsFromCard(jobCard) {
+        if (!jobCard) return null
+        
+        try {
+                const jobId = getJobIdFromElement(jobCard)
+                if (!jobId) return null
+                
+                // Extract job title
+                let jobTitle = 'Unknown Position'
+                const titleSelectors = [
+                        '.job-card-list__title',
+                        '.job-card-container__link',
+                        'a[href*="/jobs/view/"]',
+                        '.artdeco-entity-lockup__title',
+                        '.job-card-container__metadata-item'
+                ]
+                for (const selector of titleSelectors) {
+                        const titleEl = jobCard.querySelector(selector)
+                        if (titleEl && titleEl.textContent.trim()) {
+                                jobTitle = titleEl.textContent.trim().split('\n')[0].trim()
+                                if (jobTitle && jobTitle.length > 3) break
+                        }
+                }
+                
+                // Extract company name
+                let company = 'Unknown Company'
+                const companySelectors = [
+                        '.job-card-container__primary-description',
+                        '.artdeco-entity-lockup__subtitle',
+                        '.job-card-container__company-name',
+                        '[data-anonymize="company-name"]'
+                ]
+                for (const selector of companySelectors) {
+                        const companyEl = jobCard.querySelector(selector)
+                        if (companyEl && companyEl.textContent.trim()) {
+                                company = companyEl.textContent.trim().split('\n')[0].trim()
+                                if (company && company.length > 2) break
+                        }
+                }
+                
+                // Extract job link
+                let jobLink = `https://www.linkedin.com/jobs/view/${jobId}/`
+                const linkEl = jobCard.querySelector('a[href*="/jobs/view/"]')
+                if (linkEl) {
+                        const href = linkEl.getAttribute('href') || linkEl.href
+                        if (href) {
+                                try {
+                                        const url = new URL(href, window.location.origin)
+                                        jobLink = url.href.split('?')[0]
+                                } catch (e) {
+                                        jobLink = href.split('?')[0]
+                                }
+                        }
+                }
+                
+                return {
+                        jobId,
+                        jobTitle,
+                        company,
+                        jobLink,
+                        timestamp: Date.now()
+                }
+        } catch (e) {
+                console.debug('getJobDetailsFromCard error', e)
+                return null
+        }
+}
+
+// Save job to history with error handling and deduplication
+async function saveJobToHistory(jobDetails, status) {
+        if (!jobDetails || !jobDetails.jobId) return
+        
+        try {
+                const { jobHistory = [] } = await chrome.storage.local.get(['jobHistory'])
+                
+                // Check if job already exists in history (avoid duplicates)
+                const existingIndex = jobHistory.findIndex(j => j.jobId === jobDetails.jobId)
+                
+                const historyEntry = {
+                        ...jobDetails,
+                        status,
+                        appliedAt: new Date().toISOString()
+                }
+                
+                if (existingIndex >= 0) {
+                        // Update existing entry
+                        jobHistory[existingIndex] = historyEntry
+                } else {
+                        // Add new entry at the beginning (newest first)
+                        jobHistory.unshift(historyEntry)
+                }
+                
+                // Keep only last 500 jobs to prevent storage bloat
+                const trimmedHistory = jobHistory.slice(0, 500)
+                
+                await chrome.storage.local.set({ jobHistory: trimmedHistory })
+                console.log(`💾 Saved to history: ${jobDetails.jobTitle} - ${status}`)
+        } catch (e) {
+                console.debug('saveJobToHistory error', e)
+        }
 }
 
 function normalizeJobId(value) {

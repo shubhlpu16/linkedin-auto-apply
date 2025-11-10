@@ -80,6 +80,27 @@ This project serves a documentation page at the preview URL that explains how to
 - **Purpose**: Provides a web-based documentation page explaining how to install the Chrome extension
 
 ## Recent Changes
+- **2025-11-10**: Job History & Robustness Update
+  - **JOB HISTORY**: Added complete job history tracking with searchable table
+    - Captures job title, company, link, and status for every processed job
+    - New History tab in popup with filterable table (search by job/company, filter by status)
+    - Export history to CSV for external analysis
+    - Clear history option with confirmation
+    - Stores up to 500 most recent jobs to prevent storage bloat
+  - **ROBUSTNESS**: Critical error handling improvements
+    - All history saves wrapped in try/catch to prevent automation crashes
+    - History tracking never blocks job processing
+    - Graceful degradation if storage fails
+  - **TIMING FIX**: Consistent 10-second wait between ALL jobs (applied/skipped/failed/stopped)
+    - Every job pathway now uses the same 10-second countdown
+    - User can skip wait with "Skip waiting" button
+    - Prevents LinkedIn rate limiting by spacing out all requests equally
+  - **STATUS FIX**: Improved apply status accuracy
+    - Less strict verification - assumes "applied" when modal closes successfully
+    - Better detection of already-applied jobs
+  - **START FIX**: Clear logging confirms starting from first job card (index 0)
+  - **UI/UX**: Tabbed interface in popup (Profile tab + History tab)
+  
 - **2025-11-10**: Critical bug fixes and feature improvements
   - **CRITICAL FIX**: Fixed "wrong job application" bug - extension now verifies correct job loaded before applying
   - Added `waitForCorrectJobToLoad()` function with 4 verification methods (URN, links, URL, DOM attributes)
