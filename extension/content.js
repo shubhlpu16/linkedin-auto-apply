@@ -170,6 +170,7 @@ function findEasyApplyButton() {
 async function startProcessing() {
         console.log('🚀 Starting auto-apply...')
         processedJobs = new Set()
+        jobCards = []
         currentJobIndex = 0
         currentPage = 1
         currentJobNumber = 0
@@ -187,8 +188,9 @@ async function startProcessing() {
                 return
         }
         
-        console.log(`📊 Found ${jobCards.length} total jobs to process`)
-        showToast(`🚀 Processing ${jobCards.length} jobs...`, 'success')
+        console.log(`📊 Found ${jobCards.length} total jobs to process sequentially from job 1`)
+        showToast(`🚀 Starting from first job - Processing ${jobCards.length} jobs...`, 'success')
+        currentJobIndex = 0
         await processNextJob()
 }
 
@@ -1914,6 +1916,24 @@ try {
                                 ensureInjectedStyles()
                                 convertExistingBadges && convertExistingBadges(perJobRingTimers)
                                 try { sendResponse && sendResponse({ status: 'ok' }) } catch (e) { }
+                                return
+                        }
+                        if (msg.action === 'resumeProcessing' || msg.action === 'manualResume') {
+                                console.log('▶️ Resuming auto-apply from manual pause')
+                                resolveManualPause('resume')
+                                try { sendResponse && sendResponse({ status: 'resumed' }) } catch (e) { }
+                                return
+                        }
+                        if (msg.action === 'skipJob') {
+                                console.log('⏭️ Skipping current job from manual pause')
+                                resolveManualPause('skip')
+                                try { sendResponse && sendResponse({ status: 'skipped' }) } catch (e) { }
+                                return
+                        }
+                        if (msg.action === 'pauseAutoApply') {
+                                console.log('⏸️ Pausing auto-apply')
+                                isRunning = false
+                                try { sendResponse && sendResponse({ status: 'paused' }) } catch (e) { }
                                 return
                         }
                 } catch (e) {

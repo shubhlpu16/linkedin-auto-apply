@@ -608,16 +608,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         function pauseAutoApply() {
                 if (currentState !== 'paused') return
-                // Stop the countdown interval when paused
+                // Stop the countdown interval to prevent auto-resume
                 cancelCountdownInterval()
                 updateCountdownState('paused')
-                // Don't reset countdown values - this prevents timer from continuing to run
-                if (countdownValueEl) countdownValueEl.textContent = '⏸'
-                if (countdownLabelEl) countdownLabelEl.textContent = 'hold'
-                if (countdownRing) countdownRing.style.setProperty('--ring-progress', '360')
+                // Keep displaying the remaining time
+                updateCountdownDisplay()
                 resumeNowBtn.disabled = false
                 pauseBtn.disabled = true
-                setStatusHint('Auto apply paused. Resume when you are ready.')
+                setStatusHint('Auto apply paused. Resume when ready.')
         }
 
         function clearCountdown(options = {}) {
@@ -649,7 +647,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         function updateCountdownDisplay() {
                 if (!countdownValueEl || !countdownLabelEl) return
-                if (countdownRing?.dataset.state === 'paused') return
+                if (countdownRing?.dataset.state === 'paused') {
+                        // Show timer text even when paused
+                        const mins = Math.floor(countdownRemaining / 60)
+                        const secs = countdownRemaining % 60
+                        countdownValueEl.textContent = `${mins}:${secs.toString().padStart(2, '0')}`
+                        countdownLabelEl.textContent = 'paused'
+                        return
+                }
                 if (!countdownTotal || countdownRemaining <= 0) {
                         countdownValueEl.textContent = '--'
                         countdownLabelEl.textContent = COUNTDOWN_LABEL_DEFAULT
