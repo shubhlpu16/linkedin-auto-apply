@@ -92,8 +92,7 @@ function cleanupJobUI() {
 }
 
 function findEasyApplyButton() {
-        // CRITICAL FIX: Only return buttons that explicitly contain "Easy Apply" text
-        // This prevents false positives on regular "Apply" buttons
+        // CRITICAL: Use specific LinkedIn DOM IDs and check span content for foolproof detection
         const summarizeEl = (el) => {
                 if (!el) return null
                 try {
@@ -121,6 +120,26 @@ function findEasyApplyButton() {
         }
 
         const debugInfo = { scope: 'global', triedSelectors: [], method: null, matchedSelector: null, timestamp: Date.now() }
+
+        // MOST RELIABLE: Check for specific LinkedIn Easy Apply button ID
+        try {
+                const applyButtonById = document.getElementById('jobs-apply-button')
+                if (applyButtonById) {
+                        // Check if the span inside contains "Easy Apply"
+                        const span = applyButtonById.querySelector('span')
+                        const spanText = (span?.textContent || applyButtonById.textContent || '').toLowerCase().trim()
+                        if (spanText.includes('easy apply')) {
+                                debugInfo.method = 'id #jobs-apply-button with Easy Apply span (MOST RELIABLE)'
+                                debugInfo.matchedSelector = '#jobs-apply-button'
+                                debugInfo.elementSummary = summarizeEl(applyButtonById)
+                                console.log('✓ Easy Apply button found via #jobs-apply-button (MOST RELIABLE)')
+                                try { window.__li_lastEasyApply = debugInfo } catch (e) { }
+                                return applyButtonById
+                        }
+                }
+        } catch (e) {
+                console.debug('Error checking #jobs-apply-button:', e)
+        }
 
         // Priority selectors for detail pane - BUT verify they contain "Easy Apply" text
         const selectors = [
@@ -455,6 +474,11 @@ async function processNextJob() {
         currentJobNumber++
         const progressMsg = `[${currentJobNumber} Easy Apply] Job ${currentJobIndex}/${jobCards.length}`
         console.log(`🪄 ${progressMsg} Applying to job ${jobId}`)
+        
+        // Mark that this job HAD Easy Apply button before we clicked it
+        // This helps verify success: Easy Apply → Already Applied = SUCCESS
+        jobCard.dataset.hadEasyApply = 'true'
+        
         showProgressToast(currentJobNumber, currentJobIndex, jobCards.length)
         try { triggerClick(easyApplyButton) } catch (e) { try { easyApplyButton.click() } catch (e2) { console.debug('click failed', e2) } }
         await randomDelay(2000, 3500)
@@ -531,16 +555,31 @@ async function processNextJob() {
 }
 
 // After submit/modal-close, do extra checks to robustly detect a successful apply.
-// IMPROVED: Check unified top card, detail pane, toasts, and confirmation modals
+// IMPROVED: Check specific LinkedIn DOM IDs and elements for foolproof detection
+// KEY LOGIC: If job had "Easy Apply" button before, and now shows "already applied", that's SUCCESS
 async function verifyApplySuccess(jobCard, timeoutMs = 20000) {
         const end = Date.now() + Math.max(0, timeoutMs)
         const successPhrases = ['applied', 'submitted', 'application submitted', 'application sent', 'in progress']
         const toastSelectors = ['.artdeco-toast-item--success', '.artdeco-toast-item__message', '.artdeco-toast-item']
         
         let modalClosedAt = null
+        const hadEasyApplyBefore = jobCard?.dataset?.hadEasyApply === 'true'
         
         while (Date.now() <= end) {
                 try {
+                        // MOST RELIABLE: Check for "See application" link that appears after successful apply
+                        const seeApplicationLink = document.getElementById('jobs-apply-see-application-link')
+                        if (seeApplicationLink) {
+                                console.log('✓ Apply verified via #jobs-apply-see-application-link (MOST RELIABLE)')
+                                return true
+                        }
+                        
+                        // FOOLPROOF LOGIC: If this job had "Easy Apply" before, and now shows "already applied", that's definitive success
+                        if (hadEasyApplyBefore && isAlreadyApplied(jobCard)) {
+                                console.log('✓ Apply verified: Easy Apply → Already Applied transition (DEFINITIVE PROOF)')
+                                return true
+                        }
+                        
                         // 1) Check for success toast messages
                         for (const sel of toastSelectors) {
                                 const t = document.querySelector(sel)
@@ -614,6 +653,13 @@ async function verifyApplySuccess(jobCard, timeoutMs = 20000) {
 
 function isAlreadyApplied(jobCard) {
         try {
+                // MOST RELIABLE: Check for "See application" link - definitive proof of already applied
+                const seeApplicationLink = document.getElementById('jobs-apply-see-application-link')
+                if (seeApplicationLink) {
+                        console.log('✓ Already applied detected via #jobs-apply-see-application-link')
+                        return true
+                }
+                
                 const text = (jobCard.innerText || '').toLowerCase()
                 
                 // Check job card text
