@@ -80,6 +80,16 @@ This project serves a documentation page at the preview URL that explains how to
 - **Purpose**: Provides a web-based documentation page explaining how to install the Chrome extension
 
 ## Recent Changes
+- **2025-11-10**: Critical bug fixes and feature improvements
+  - **CRITICAL FIX**: Fixed "wrong job application" bug - extension now verifies correct job loaded before applying
+  - Added `waitForCorrectJobToLoad()` function with 4 verification methods (URN, links, URL, DOM attributes)
+  - Fixed sequential processing to always start from job 1 (was starting at random position)
+  - Fixed resume/pause functionality - resume button now properly resumes auto-apply
+  - Added message handlers for manualResume, skipJob, pauseAutoApply actions
+  - Added LinkedIn validation error detection - auto-pauses when validation errors appear after clicking Next
+  - Timer now displays remaining time in countdown ring during pause state (shows "M:SS" + "paused" label)
+  - Set per-job timeout to 60 seconds (reasonable for application flow)
+  - Added MANUAL_REVIEW_SECONDS constant (300s for manual form completion)
 - **2025-11-10**: Replit environment setup
   - Created Node.js HTTP server to serve documentation page
   - Configured workflow to run on port 5000
