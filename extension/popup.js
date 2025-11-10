@@ -980,7 +980,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Listen for history updates from content script
         chrome.storage.onChanged.addListener((changes, areaName) => {
                 if (areaName === 'local' && changes.jobHistory) {
-                        loadHistory()
+                        // Only reload history if the History tab is currently active
+                        const historyTab = document.getElementById('historyTab')
+                        if (historyTab && historyTab.classList.contains('active')) {
+                                loadHistory()
+                        }
                 }
         })
 })

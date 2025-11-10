@@ -92,8 +92,8 @@ function cleanupJobUI() {
 }
 
 function findEasyApplyButton() {
-        // CRITICAL FIX: Search GLOBALLY first (detail pane), not scoped to card
-        // The Easy Apply button appears in the right-side detail pane on modern LinkedIn
+        // CRITICAL FIX: Only return buttons that explicitly contain "Easy Apply" text
+        // This prevents false positives on regular "Apply" buttons
         const summarizeEl = (el) => {
                 if (!el) return null
                 try {
@@ -106,54 +106,61 @@ function findEasyApplyButton() {
                         }
                 } catch (e) { return { tag: el.tagName } }
         }
+        
+        const isEasyApplyButton = (btn) => {
+                if (!btn || btn.disabled) return false
+                const text = (btn.textContent || '').toLowerCase().trim()
+                const ariaLabel = (btn.getAttribute && btn.getAttribute('aria-label') || '').toLowerCase().trim()
+                const dataAttr = btn.getAttribute && btn.getAttribute('data-is-easy-apply')
+                
+                // Require explicit "easy apply" text or data attribute
+                const hasEasyApplyText = text.includes('easy apply') || ariaLabel.includes('easy apply')
+                const hasEasyApplyAttr = dataAttr === 'true' || dataAttr === '1'
+                
+                return hasEasyApplyText || hasEasyApplyAttr
+        }
 
         const debugInfo = { scope: 'global', triedSelectors: [], method: null, matchedSelector: null, timestamp: Date.now() }
 
-        // Priority selectors for detail pane (jobs/search, jobs/collections, etc.)
+        // Priority selectors for detail pane - BUT verify they contain "Easy Apply" text
         const selectors = [
+                'button[aria-label*="Easy Apply"]',
+                'button[data-control-name*="jobdetails_topcard_inapply"]',
                 'button.jobs-apply-button',
                 'button[data-test-global-apply-button]',
-                'button[aria-label*="Easy Apply"]',
                 '.jobs-apply-button--top-card button',
                 'button.jobs-apply-button--top-card',
-                'button[data-control-name*="jobdetails_topcard_inapply"]',
-                'button[data-control-name*="jobdetails_topcard_in_apply"]',
                 'button[data-test-apply-button]',
                 '.jobs-unified-top-card__content--two-pane button.jobs-apply-button',
-                '.jobs-details__main-content button[aria-label*="Easy Apply"]',
-                'button.artdeco-button--primary[aria-label*="Easy Apply"]',
-                'a[role="button"][aria-label*="Easy Apply"]',
+                '.jobs-details__main-content button',
+                'button.artdeco-button--primary',
+                'a[role="button"]',
         ]
 
-        // Search globally (detail pane)
+        // Search globally (detail pane) and validate "Easy Apply" text
         for (const selector of selectors) {
                 debugInfo.triedSelectors.push(selector)
                 try {
                         const btn = document.querySelector(selector)
-                        if (btn && !btn.disabled) {
-                                debugInfo.method = 'selector'
+                        if (btn && isEasyApplyButton(btn)) {
+                                debugInfo.method = 'selector + text validation'
                                 debugInfo.matchedSelector = selector
                                 debugInfo.elementSummary = summarizeEl(btn)
-                                console.log('✓ EasyApply button found:', selector)
+                                console.log('✓ Easy Apply button found:', selector)
                                 try { window.__li_lastEasyApply = debugInfo } catch (e) { }
                                 return btn
                         }
                 } catch (e) { }
         }
 
-        // Fallback: text-based search in all visible buttons
-        const buttonHints = ['easy apply']
+        // Fallback: scan all buttons for "Easy Apply" text
         try {
                 const allButtons = [...document.querySelectorAll('button, a[role="button"]')]
                 for (const btn of allButtons) {
-                        if (btn.disabled) continue
-                        const text = (btn.textContent || btn.getAttribute('aria-label') || '').toLowerCase().trim()
-                        if (!text) continue
-                        const matched = buttonHints.find((h) => text === h || text.startsWith(h))
-                        if (matched) {
-                                debugInfo.method = 'text'
+                        if (isEasyApplyButton(btn)) {
+                                debugInfo.method = 'text scan'
                                 debugInfo.elementSummary = summarizeEl(btn)
-                                console.log('✓ EasyApply button found via text:', matched)
+                                console.log('✓ Easy Apply button found via text scan')
                                 try { window.__li_lastEasyApply = debugInfo } catch (e) { }
                                 return btn
                         }
@@ -161,7 +168,7 @@ function findEasyApplyButton() {
         } catch (e) { }
 
         // Not found
-        console.log('✗ No Easy Apply button found')
+        console.log('✗ No Easy Apply button found (strict validation)')
         try { window.__li_lastEasyApply = debugInfo } catch (e) { }
         return null
 }
@@ -296,15 +303,35 @@ async function processNextJob() {
                 currentJobIndex = 0
         }
 
-        const jobCard = jobCards[currentJobIndex++]
+        const jobCard = jobCards[currentJobIndex]
+        if (!jobCard) {
+                console.log('⚠️ No job card at index', currentJobIndex)
+                currentJobIndex++
+                if (!isRunning) return
+                return await processNextJob()
+        }
+        
         const jobId = getJobIdFromElement(jobCard)
         const jobDetails = getJobDetailsFromCard(jobCard)
 
-        if (!jobId || processedJobs.has(jobId)) {
+        if (!jobId) {
+                console.log(`⚠️ No jobId found for card at index ${currentJobIndex}, retrying...`)
+                // Don't increment index yet - retry same card
+                if (!isRunning) return
+                await randomDelay(500, 1000)
+                return await processNextJob()
+        }
+        
+        if (processedJobs.has(jobId)) {
+                console.log(`⏭️ Job ${jobId} already processed, moving to next`)
+                currentJobIndex++
                 if (!isRunning) return
                 await randomDelay(200, 500)
                 return await processNextJob()
         }
+        
+        // Valid job found - increment index for next iteration
+        currentJobIndex++
 
         // Track attempts per job and avoid infinite retries
         const attempts = jobAttempts.get(jobId) || 0
@@ -1360,8 +1387,11 @@ async function openJobCard(card) {
 }
 
 // Wait for the correct job to load in the detail pane by verifying job ID or metadata
-async function waitForCorrectJobToLoad(expectedJobId, timeout = 5000) {
+async function waitForCorrectJobToLoad(expectedJobId, timeout = 8000) {
         const startTime = Date.now()
+        let wrongJobDetections = 0
+        let lastWrongJobId = null
+        
         while (Date.now() - startTime < timeout) {
                 // Check if the detail pane is showing the expected job
                 const detailPane = document.querySelector('.jobs-unified-top-card, .jobs-details__main-content, .jobs-search__job-details, .jobs-details')
@@ -1378,18 +1408,36 @@ async function waitForCorrectJobToLoad(expectedJobId, timeout = 5000) {
                         for (const link of links) {
                                 const href = link.getAttribute('href') || link.href
                                 const jobId = extractJobIdFromHref(href)
-                                if (jobId === expectedJobId) {
-                                        console.log(`✅ Verified correct job ${expectedJobId} via detail pane link`)
-                                        return jobId
+                                if (jobId) {
+                                        if (jobId === expectedJobId) {
+                                                console.log(`✅ Verified correct job ${expectedJobId} via detail pane link`)
+                                                return jobId
+                                        } else {
+                                                // Detected wrong job - track it
+                                                if (jobId !== lastWrongJobId) {
+                                                        wrongJobDetections++
+                                                        lastWrongJobId = jobId
+                                                        console.log(`⚠️ Wrong job detected in detail pane: expected ${expectedJobId}, found ${jobId} (detection #${wrongJobDetections})`)
+                                                }
+                                                // Abort if wrong job persists
+                                                if (wrongJobDetections >= 3) {
+                                                        console.log(`❌ Aborting: wrong job ${jobId} persistently loaded instead of ${expectedJobId}`)
+                                                        return null
+                                                }
+                                        }
                                 }
                         }
                         
                         // Method 3: Check URL bar if on job details page
                         try {
                                 const urlJobId = extractJobIdFromHref(window.location.href)
-                                if (urlJobId === expectedJobId) {
-                                        console.log(`✅ Verified correct job ${expectedJobId} from URL`)
-                                        return urlJobId
+                                if (urlJobId) {
+                                        if (urlJobId === expectedJobId) {
+                                                console.log(`✅ Verified correct job ${expectedJobId} from URL`)
+                                                return urlJobId
+                                        } else {
+                                                console.log(`⚠️ Wrong job in URL: expected ${expectedJobId}, found ${urlJobId}`)
+                                        }
                                 }
                         } catch (e) {}
                         
@@ -1401,10 +1449,10 @@ async function waitForCorrectJobToLoad(expectedJobId, timeout = 5000) {
                         }
                 }
                 
-                await randomDelay(300, 500)
+                await randomDelay(400, 600)
         }
         
-        console.log(`⚠️ Timeout waiting for job ${expectedJobId} to load in detail pane`)
+        console.log(`⚠️ Timeout waiting for job ${expectedJobId} to load in detail pane (waited ${timeout}ms, wrong job detections: ${wrongJobDetections})`)
         return null
 }
 
