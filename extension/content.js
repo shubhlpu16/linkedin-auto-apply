@@ -6,7 +6,8 @@ let jobCards = []
 let currentPage = 1
 let delayRange = { min: 5000, max: 12000 } // configurable delay (in ms)
 let jobAttempts = new Map()
-let perJobTimeoutSeconds = 120 // default per-job timeout (seconds)
+let perJobTimeoutSeconds = 60 // default per-job timeout (seconds) - reasonable timeout for processing
+const MANUAL_REVIEW_SECONDS = 300 // 5 minutes for manual review
 let contentRunElapsed = 0
 let contentRunInterval = null
 let contentRunBadge = null
@@ -329,6 +330,19 @@ async function processNextJob() {
         console.log(`🧾 Opening job ${jobId}`)
         await randomDelay(2500, 4000)
 
+        // CRITICAL: Verify the correct job loaded in detail pane before proceeding
+        const loadedJobId = await waitForCorrectJobToLoad(jobId, 5000)
+        if (!loadedJobId) {
+                console.log(`⚠️ Job ${jobId} detail pane did not load correctly, skipping`)
+                processedJobs.add(jobId)
+                markJobStatus(jobCard, 'skipped')
+                jobTimer.clear()
+                await incrementSkipped()
+                if (!isRunning) return
+                await randomDelay(500, 1000)
+                return await processNextJob()
+        }
+
         // Skip if job is already applied
         if (isAlreadyApplied(jobCard)) {
                 console.log(`⏭️ Skipping already applied job ${jobId}`)
@@ -610,6 +624,17 @@ async function attemptModalProgress(modal) {
         if (nextBtn) {
                 if (nextBtn.disabled) return 'manualPause'
                 nextBtn.click()
+                
+                // Wait briefly for validation to appear
+                await randomDelay(800, 1200)
+                
+                // Check for validation errors after clicking Next
+                const modalNow = getApplyModal()
+                if (modalNow && hasBlockingErrors(modalNow)) {
+                        console.log('⚠️ LinkedIn validation error detected after clicking Next - triggering manual pause')
+                        return 'manualPause'
+                }
+                
                 const result = await evaluateAfterClick({ allowContinue: true })
                 return result
         }
@@ -1187,6 +1212,55 @@ async function openJobCard(card) {
         debugInfo.opened = false
         try { window.__li_lastOpenJob = debugInfo } catch (e) { }
         console.debug('openJobCard: failed to open job details for card', summarizeEl(card), debugInfo)
+}
+
+// Wait for the correct job to load in the detail pane by verifying job ID or metadata
+async function waitForCorrectJobToLoad(expectedJobId, timeout = 5000) {
+        const startTime = Date.now()
+        while (Date.now() - startTime < timeout) {
+                // Check if the detail pane is showing the expected job
+                const detailPane = document.querySelector('.jobs-unified-top-card, .jobs-details__main-content, .jobs-search__job-details, .jobs-details')
+                if (detailPane) {
+                        // Method 1: Check for data-entity-urn or data-job-id attributes
+                        const urnElement = detailPane.querySelector('[data-entity-urn*="' + expectedJobId + '"]')
+                        if (urnElement) {
+                                console.log(`✅ Verified correct job ${expectedJobId} via data-entity-urn`)
+                                return expectedJobId
+                        }
+                        
+                        // Method 2: Extract job ID from URLs in detail pane
+                        const links = detailPane.querySelectorAll('a[href*="/jobs/view/"]')
+                        for (const link of links) {
+                                const href = link.getAttribute('href') || link.href
+                                const jobId = extractJobIdFromHref(href)
+                                if (jobId === expectedJobId) {
+                                        console.log(`✅ Verified correct job ${expectedJobId} via detail pane link`)
+                                        return jobId
+                                }
+                        }
+                        
+                        // Method 3: Check URL bar if on job details page
+                        try {
+                                const urlJobId = extractJobIdFromHref(window.location.href)
+                                if (urlJobId === expectedJobId) {
+                                        console.log(`✅ Verified correct job ${expectedJobId} from URL`)
+                                        return urlJobId
+                                }
+                        } catch (e) {}
+                        
+                        // Method 4: Check for stable DOM element with job ID in attributes
+                        const allElements = detailPane.querySelectorAll('[id*="' + expectedJobId + '"], [class*="' + expectedJobId + '"]')
+                        if (allElements.length > 0) {
+                                console.log(`✅ Verified correct job ${expectedJobId} via DOM attributes`)
+                                return expectedJobId
+                        }
+                }
+                
+                await randomDelay(300, 500)
+        }
+        
+        console.log(`⚠️ Timeout waiting for job ${expectedJobId} to load in detail pane`)
+        return null
 }
 
 // Poll for a selector to appear within a timeout (ms). Returns the element or null.
