@@ -1,0 +1,12 @@
+{
+  "name": "linkedin-auto-apply-extension",
+  "version": "1.0.0",
+  "description": "LinkedIn Auto Apply Chrome Extension - Documentation Server",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": ["linkedin", "chrome-extension", "automation"],
+  "author": "",
+  "license": "MIT"
+}
