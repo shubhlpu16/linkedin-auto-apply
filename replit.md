@@ -80,6 +80,14 @@ This project serves a documentation page at the preview URL that explains how to
 - **Purpose**: Provides a web-based documentation page explaining how to install the Chrome extension
 
 ## Recent Changes
+- **2025-11-10**: Critical Bug Fixes & UI Improvements
+  - **BUG FIX: Starting from 1st card**: Fixed index increment logic - now only advances after confirming valid jobId, ensuring automation always starts from the first job
+  - **BUG FIX: Easy Apply detection**: Strengthened button detection with strict "Easy Apply" text/aria validation - prevents false positives on regular Apply buttons
+  - **BUG FIX: Wrong job application**: Enhanced job verification to detect and abort when wrong job is loaded - prevents applying to incorrect jobs
+  - **UI: Skills marked as experimental**: Skills section now clearly labeled as experimental feature and not required
+  - **UI: Refresh documentation note**: Added reminder to refresh page after updates
+  - **OPTIMIZATION: History tab loading**: History only loads when History tab is clicked, improving performance
+  
 - **2025-11-10**: Job History & Robustness Update
   - **JOB HISTORY**: Added complete job history tracking with searchable table
     - Captures job title, company, link, and status for every processed job
