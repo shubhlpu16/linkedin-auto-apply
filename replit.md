@@ -72,7 +72,20 @@ This project serves a documentation page at the preview URL that explains how to
 - `index.html` - Documentation page (served on Replit)
 - `README.md` - Detailed usage instructions
 
+## Replit Environment Setup
+- **Documentation Server**: Node.js HTTP server running on port 5000
+- **Server File**: `server.js` - serves the documentation page and extension files
+- **Workflow**: `documentation-server` - runs `npm start`
+- **Deployment**: Configured for autoscale deployment
+- **Purpose**: Provides a web-based documentation page explaining how to install the Chrome extension
+
 ## Recent Changes
+- **2025-11-10**: Replit environment setup
+  - Created Node.js HTTP server to serve documentation page
+  - Configured workflow to run on port 5000
+  - Set up deployment configuration for autoscale
+  - Server serves index.html and extension files with proper MIME types
+  - Cache control headers added to prevent stale content
 - **2025-11-08**: Major updates and fixes
   - Fixed "no easy apply jobs found" issue - now processes ALL jobs sequentially
   - Removed pre-counting, checks Easy Apply availability per job dynamically
