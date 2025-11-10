@@ -206,6 +206,8 @@ async function collectJobCards() {
         const seenElements = new Set()
         const seenJobIds = new Set()
         const collected = []
+        let totalScanned = 0
+        let filtered = { noJobId: 0, alreadyProcessed: 0, hasDisqualifier: 0 }
 
         for (const selector of JOB_CARD_SELECTORS) {
                 const nodes = document.querySelectorAll(selector)
@@ -213,9 +215,22 @@ async function collectJobCards() {
                 nodes.forEach((node) => {
                         if (seenElements.has(node)) return
                         seenElements.add(node)
+                        totalScanned++
+                        
                         const jobId = getJobIdFromElement(node)
-                        if (!jobId || processedJobs.has(jobId) || seenJobIds.has(jobId)) return
-                        if (jobCardHasDisqualifier(node)) return
+                        if (!jobId) {
+                                filtered.noJobId++
+                                return
+                        }
+                        if (processedJobs.has(jobId) || seenJobIds.has(jobId)) {
+                                filtered.alreadyProcessed++
+                                return
+                        }
+                        if (jobCardHasDisqualifier(node)) {
+                                filtered.hasDisqualifier++
+                                console.log(`⏭️ Filtered job ${jobId} - disqualifier found`)
+                                return
+                        }
                         node.dataset.liAutoApplyJobId = jobId
                         seenJobIds.add(jobId)
                         collected.push(node)
@@ -223,7 +238,17 @@ async function collectJobCards() {
         }
 
         jobCards = collected
-        console.log(`📄 Found ${jobCards.length} eligible jobs on page ${currentPage}`)
+        console.log(`📄 Scanned ${totalScanned} cards, found ${jobCards.length} eligible jobs on page ${currentPage}`)
+        console.log(`   Filtered: ${filtered.noJobId} (no ID), ${filtered.alreadyProcessed} (already processed), ${filtered.hasDisqualifier} (disqualifier)`)
+        
+        // Log the first 3 jobs to help with debugging
+        if (jobCards.length > 0) {
+                console.log(`🎯 First jobs in queue:`)
+                jobCards.slice(0, 3).forEach((card, idx) => {
+                        const details = getJobDetailsFromCard(card)
+                        console.log(`   ${idx + 1}. ${details.jobTitle} at ${details.company} (ID: ${details.jobId})`)
+                })
+        }
 }
 
 // Show a dismissible countdown before moving to next job. Resolves when timer
@@ -1108,14 +1133,23 @@ function showProgressToast(easyApplyCount, currentJob, totalJobs) {
 function jobCardHasDisqualifier(card) {
         if (!card) return true
         const text = (card.innerText || '').toLowerCase()
+        
+        // More specific check for "applied" status - only filter if it's explicitly marked as applied
+        const hasAppliedStatus = card.querySelector('.job-card-container__footer-item--highlighted, .job-card-container__applied-date, [data-test-job-card-footer-applied]')
+        if (hasAppliedStatus) return true
+        
+        // Check for other disqualifiers
         if (
-                /applied|promoted|no longer|expired|other job type|not accepting|closed/i.test(
+                /no longer accepting|expired|not accepting applications|closed|position filled/i.test(
                         text,
                 )
         )
                 return true
+        
+        // Skip promoted jobs (optional - remove this if you want to apply to promoted jobs too)
         const displayType = card.getAttribute('data-jobcard-displaytype') || ''
         if (displayType.toLowerCase().includes('promoted')) return true
+        
         return false
 }
 
