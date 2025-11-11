@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "LinkedIn Auto Apply",
   "version": "1.0.0",
-  "description": "Automatically apply to LinkedIn jobs using Easy Apply",
+  "description": "Smart automation for LinkedIn Easy Apply - Auto-fill forms, track applications, and apply to multiple jobs effortlessly",
   "permissions": [
     "storage",
     "activeTab",
