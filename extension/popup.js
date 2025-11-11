@@ -99,49 +99,36 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         async function fetchGooglePlacesPredictions(query) {
                 try {
-                        // Use Google Places Autocomplete API
-                        const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&types=(cities)&key=${GOOGLE_PLACES_API_KEY}`
-                        
-                        const response = await fetch(url)
-                        const data = await response.json()
-                        
-                        if (data.status === 'OK' && data.predictions) {
-                                currentPredictions = data.predictions.map(p => ({
-                                        description: p.description,
-                                        placeId: p.place_id
-                                }))
-                                displayLocationDropdown()
-                        } else if (data.status === 'REQUEST_DENIED') {
-                                console.warn('Google Places API key required. Using fallback locations.')
-                                useFallbackLocations(query)
-                        } else {
-                                hideLocationDropdown()
-                        }
-                } catch (error) {
-                        console.error('Error fetching Google Places:', error)
-                        useFallbackLocations(query)
-                }
-        }
-
-        function useFallbackLocations(query) {
-                // Fallback to static locations from JSON if Google API fails
-                fetch(chrome.runtime.getURL('locations.json'))
-                        .then(res => res.json())
-                        .then(locations => {
-                                const normalized = query.toLowerCase()
-                                const filtered = locations
-                                        .filter(loc => loc.label.toLowerCase().includes(normalized))
-                                        .slice(0, 10)
-                                        .map(loc => ({ description: loc.label }))
+                        // Send message to background script to fetch predictions
+                        // This bypasses CORS restrictions in Manifest V3
+                        chrome.runtime.sendMessage({
+                                action: 'getPlacePredictions',
+                                query: query
+                        }, (response) => {
+                                if (chrome.runtime.lastError) {
+                                        console.error('Extension error:', chrome.runtime.lastError)
+                                        hideLocationDropdown()
+                                        return
+                                }
                                 
-                                currentPredictions = filtered
-                                if (filtered.length > 0) {
+                                if (response && response.success && response.predictions) {
+                                        // Format results as: City, State, Country
+                                        currentPredictions = response.predictions.map(p => ({
+                                                description: p.description,
+                                                placeId: p.place_id
+                                        }))
                                         displayLocationDropdown()
+                                } else if (response && response.error) {
+                                        console.error('Google Places API error:', response.error)
+                                        hideLocationDropdown()
                                 } else {
                                         hideLocationDropdown()
                                 }
                         })
-                        .catch(err => console.error('Fallback locations failed:', err))
+                } catch (error) {
+                        console.error('Error fetching Google Places:', error)
+                        hideLocationDropdown()
+                }
         }
 
         function displayLocationDropdown() {

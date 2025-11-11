@@ -128,10 +128,18 @@ This project serves a documentation page at the preview URL that explains how to
 - **Purpose**: Provides a web-based documentation page explaining how to install the Chrome extension
 
 ## Recent Changes
-- **2025-11-11**: Enhanced Form Auto-Fill & Location Search
+- **2025-11-11**: Location Search API Integration Fixed
+  - **LOCATION SEARCH**: Google Places API integration properly implemented via background service worker
+    - Real-time location suggestions as you type (City, State, Country format)
+    - Bypasses CORS restrictions using Manifest V3 architecture
+    - No fallback locations - direct Google Places API only
+    - Handles alternative city names (Gurugram/Gurgaon, Bengaluru/Bangalore) automatically
+    - Auto-fills location field on LinkedIn application forms
+    - User needs to add their own Google Places API key in background.js
+  
+- **2025-11-11**: Enhanced Form Auto-Fill & Location Search (Initial Implementation)
   - **LOCATION SEARCH**: Google Places API integration with LinkedIn-style autocomplete
     - Real-time location suggestions as you type (City, State, Country format)
-    - Fallback to 130+ curated locations when Google API unavailable
     - Auto-fills location field on LinkedIn application forms
   - **GENDER & DISABILITY**: Added dropdown fields for demographic information
     - Gender options: Male, Female, Non-binary, Other, Prefer not to say
