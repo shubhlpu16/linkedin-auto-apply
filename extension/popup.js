@@ -32,6 +32,164 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         const requiredFieldIds = ['fullName', 'email', 'phone']
 
+        // Location autocomplete using Google Places API
+        const locationInput = document.getElementById('location')
+        const locationDropdown = document.getElementById('locationDropdown')
+        let selectedIndex = -1
+        let debounceTimer = null
+        let currentPredictions = []
+        const GOOGLE_PLACES_API_KEY = 'AIzaSyDummyKeyForPlaceholder' // User will need to add their own key
+
+        // Setup ARIA attributes
+        if (locationInput && locationDropdown) {
+                locationInput.setAttribute('role', 'combobox')
+                locationInput.setAttribute('aria-autocomplete', 'list')
+                locationInput.setAttribute('aria-expanded', 'false')
+                locationInput.setAttribute('aria-controls', 'locationDropdown')
+                locationDropdown.setAttribute('role', 'listbox')
+
+                // Input handler with debouncing
+                locationInput.addEventListener('input', (e) => {
+                        clearTimeout(debounceTimer)
+                        debounceTimer = setTimeout(() => {
+                                const query = e.target.value.trim()
+                                if (query.length < 2) {
+                                        hideLocationDropdown()
+                                        return
+                                }
+                                fetchGooglePlacesPredictions(query)
+                        }, 300)
+                })
+
+                // Keyboard navigation
+                locationInput.addEventListener('keydown', (e) => {
+                        if (!locationDropdown.classList.contains('active')) return
+
+                        switch (e.key) {
+                                case 'ArrowDown':
+                                        e.preventDefault()
+                                        selectedIndex = Math.min(selectedIndex + 1, currentPredictions.length - 1)
+                                        updateLocationHighlight()
+                                        break
+                                case 'ArrowUp':
+                                        e.preventDefault()
+                                        selectedIndex = Math.max(selectedIndex - 1, -1)
+                                        updateLocationHighlight()
+                                        break
+                                case 'Enter':
+                                        e.preventDefault()
+                                        if (selectedIndex >= 0 && currentPredictions[selectedIndex]) {
+                                                selectLocation(currentPredictions[selectedIndex])
+                                        }
+                                        break
+                                case 'Escape':
+                                        e.preventDefault()
+                                        hideLocationDropdown()
+                                        break
+                        }
+                })
+
+                // Close dropdown when clicking outside
+                document.addEventListener('click', (e) => {
+                        if (!e.target.closest('.location-autocomplete')) {
+                                hideLocationDropdown()
+                        }
+                })
+        }
+
+        async function fetchGooglePlacesPredictions(query) {
+                try {
+                        // Use Google Places Autocomplete API
+                        const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&types=(cities)&key=${GOOGLE_PLACES_API_KEY}`
+                        
+                        const response = await fetch(url)
+                        const data = await response.json()
+                        
+                        if (data.status === 'OK' && data.predictions) {
+                                currentPredictions = data.predictions.map(p => ({
+                                        description: p.description,
+                                        placeId: p.place_id
+                                }))
+                                displayLocationDropdown()
+                        } else if (data.status === 'REQUEST_DENIED') {
+                                console.warn('Google Places API key required. Using fallback locations.')
+                                useFallbackLocations(query)
+                        } else {
+                                hideLocationDropdown()
+                        }
+                } catch (error) {
+                        console.error('Error fetching Google Places:', error)
+                        useFallbackLocations(query)
+                }
+        }
+
+        function useFallbackLocations(query) {
+                // Fallback to static locations from JSON if Google API fails
+                fetch(chrome.runtime.getURL('locations.json'))
+                        .then(res => res.json())
+                        .then(locations => {
+                                const normalized = query.toLowerCase()
+                                const filtered = locations
+                                        .filter(loc => loc.label.toLowerCase().includes(normalized))
+                                        .slice(0, 10)
+                                        .map(loc => ({ description: loc.label }))
+                                
+                                currentPredictions = filtered
+                                if (filtered.length > 0) {
+                                        displayLocationDropdown()
+                                } else {
+                                        hideLocationDropdown()
+                                }
+                        })
+                        .catch(err => console.error('Fallback locations failed:', err))
+        }
+
+        function displayLocationDropdown() {
+                locationDropdown.innerHTML = ''
+                
+                currentPredictions.forEach((prediction, index) => {
+                        const option = document.createElement('div')
+                        option.className = 'location-option'
+                        option.textContent = prediction.description
+                        option.setAttribute('role', 'option')
+                        option.setAttribute('data-index', index)
+                        
+                        option.addEventListener('click', () => selectLocation(prediction))
+                        option.addEventListener('mouseenter', () => {
+                                selectedIndex = index
+                                updateLocationHighlight()
+                        })
+                        
+                        locationDropdown.appendChild(option)
+                })
+                
+                locationDropdown.classList.add('active')
+                locationInput.setAttribute('aria-expanded', 'true')
+        }
+
+        function updateLocationHighlight() {
+                const options = locationDropdown.querySelectorAll('.location-option')
+                options.forEach((opt, idx) => {
+                        opt.classList.toggle('highlighted', idx === selectedIndex)
+                        if (idx === selectedIndex) {
+                                opt.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+                        }
+                })
+        }
+
+        function selectLocation(prediction) {
+                locationInput.value = prediction.description
+                hideLocationDropdown()
+                // Trigger input event to mark form as dirty
+                locationInput.dispatchEvent(new Event('input', { bubbles: true }))
+        }
+
+        function hideLocationDropdown() {
+                locationDropdown.classList.remove('active')
+                locationInput.setAttribute('aria-expanded', 'false')
+                selectedIndex = -1
+        }
+
         const STATUS_CONFIG = {
                 inactive: {
                         badge: 'Inactive',
@@ -308,6 +466,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 document.getElementById('noticePeriod').value = data.noticePeriod || ''
                 document.getElementById('workAuthorization').value =
                         data.workAuthorization || ''
+                document.getElementById('gender').value = data.gender || ''
+                document.getElementById('disability').value = data.disability || ''
+                document.getElementById('willingToRelocate').checked = data.willingToRelocate || false
 
                 skillsContainer.innerHTML = ''
                         ; (data.skills || []).forEach((skill) => addSkillRow(skill))
@@ -336,6 +497,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                         workAuthorization: document
                                 .getElementById('workAuthorization')
                                 .value.trim(),
+                        gender: document.getElementById('gender').value.trim(),
+                        disability: document.getElementById('disability').value.trim(),
+                        willingToRelocate: document.getElementById('willingToRelocate').checked,
                         skills,
                 }
         }

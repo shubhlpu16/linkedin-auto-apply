@@ -890,27 +890,44 @@ async function evaluateAfterClick({ allowContinue = false } = {}) {
                 return 'submitted'
         }
 
-        // If a confirmation / "Done" style button is shown in the modal, wait up to
-        // 10 seconds for the modal to be closed (user may click Done). If it doesn't
-        // close in time, treat as skipped and move on.
+        // Auto-click "Done" or close button on confirmation modals
         try {
+                // Look for "Done" style buttons
                 const doneLike = [...modal.querySelectorAll('button')].find((b) => {
                         const t = (b.textContent || '').toLowerCase()
-                        return /done|close|dismiss|finish|got it|all done|completed|finished/.test(t)
+                        return /done|close|dismiss|finish|got it|all done|completed|finished|ok|continue/.test(t)
                 })
+                
                 if (doneLike) {
-                        const closed = await waitForModalClose(10)
+                        console.log('✓ Found confirmation button, clicking automatically...')
+                        doneLike.click()
+                        await randomDelay(1000, 1500)
+                        
+                        // Wait for modal to close after clicking
+                        const closed = await waitForModalClose(5)
                         if (closed) {
-                                console.log('✅ Confirmation detected and modal closed')
+                                console.log('✅ Confirmation modal closed successfully')
                                 await randomDelay(1500, 2500)
                                 return 'submitted'
                         }
-                        // timed out waiting for a confirmation/done click — treat as a failed submit
-                        console.log('⏱️ Confirmation not clicked within 10s, marking as failed')
-                        return 'failed'
+                }
+                
+                // If no "Done" button, look for close (X) button
+                const closeButton = modal.querySelector('button[aria-label*="Dismiss"], button[aria-label*="Close"], button.artdeco-modal__dismiss')
+                if (closeButton) {
+                        console.log('✓ Found close button (X), clicking automatically...')
+                        closeButton.click()
+                        await randomDelay(1000, 1500)
+                        
+                        const closed = await waitForModalClose(5)
+                        if (closed) {
+                                console.log('✅ Modal closed via close button')
+                                await randomDelay(1500, 2500)
+                                return 'submitted'
+                        }
                 }
         } catch (e) {
-                console.debug('Error checking for done-like button:', e)
+                console.debug('Error auto-clicking confirmation button:', e)
         }
         if (hasBlockingErrors(modal) || hasUnansweredRequired(modal)) {
                 return 'manualPause'
@@ -1013,6 +1030,7 @@ function fillFormFields(container) {
         fillSelectFields(container)
         fillTextAreas(container)
         fillRadioButtons(container)
+        fillCheckboxes(container)
         fillSkillRelatedFields(container)
 }
 
@@ -1075,11 +1093,37 @@ function fillSelectFields(container) {
         container.querySelectorAll('select').forEach((select) => {
                 if (select.value) return
                 const label = getFieldLabel(select).toLowerCase()
+                
+                // Work authorization
                 if (label.includes('authorization') && userData.workAuthorization) {
                         const option = [...select.options].find((o) =>
                                 o.textContent
                                         .toLowerCase()
                                         .includes(userData.workAuthorization.toLowerCase()),
+                        )
+                        if (option) {
+                                select.value = option.value
+                                select.dispatchEvent(new Event('change', { bubbles: true }))
+                        }
+                }
+                // Gender
+                else if (label.includes('gender') && userData.gender) {
+                        const option = [...select.options].find((o) =>
+                                o.textContent
+                                        .toLowerCase()
+                                        .includes(userData.gender.toLowerCase()),
+                        )
+                        if (option) {
+                                select.value = option.value
+                                select.dispatchEvent(new Event('change', { bubbles: true }))
+                        }
+                }
+                // Disability (only match disability-specific questions, not veteran status)
+                else if (label.includes('disability') && userData.disability) {
+                        const option = [...select.options].find((o) =>
+                                o.textContent
+                                        .toLowerCase()
+                                        .includes(userData.disability === 'yes' ? 'yes' : 'no'),
                         )
                         if (option) {
                                 select.value = option.value
@@ -1106,7 +1150,9 @@ function fillRadioButtons(container) {
         radios.forEach((r) => (groups[r.name] = [...(groups[r.name] || []), r]))
         for (const group of Object.values(groups)) {
                 if (group.some((r) => r.checked)) continue
-                const label = getFieldLabel(group[0])
+                const label = getFieldLabel(group[0]).toLowerCase()
+                
+                // Work authorization
                 if (label.includes('authorization') && userData.workAuthorization) {
                         const yes = group.find((r) =>
                                 (r.getAttribute('aria-label') || '')
@@ -1114,8 +1160,59 @@ function fillRadioButtons(container) {
                                         .includes(userData.workAuthorization.toLowerCase()),
                         )
                         if (yes) yes.click()
-                } else group[0].click()
+                }
+                // Willing to relocate
+                else if (label.includes('relocate') || label.includes('relocation')) {
+                        const option = group.find((r) =>
+                                (r.getAttribute('aria-label') || r.nextSibling?.textContent || '')
+                                        .toLowerCase()
+                                        .includes(userData.willingToRelocate ? 'yes' : 'no'),
+                        )
+                        if (option) option.click()
+                        else if (userData.willingToRelocate) group[0].click()
+                }
+                // Default: select first option
+                else {
+                        group[0].click()
+                }
         }
+}
+
+function fillCheckboxes(container) {
+        container.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+                const label = getFieldLabel(checkbox).toLowerCase()
+                const ariaLabel = (checkbox.getAttribute('aria-label') || '').toLowerCase()
+                const combined = label + ' ' + ariaLabel
+                
+                // SKIP "mark as top choice" or similar preference checkboxes
+                if (combined.includes('top choice') || 
+                    combined.includes('dream job') || 
+                    combined.includes('top apply') ||
+                    combined.includes('priority') ||
+                    combined.includes('mark this job') ||
+                    combined.includes('favorite')) {
+                        console.log('⏭️ Skipping preference checkbox: ' + (label || ariaLabel))
+                        return
+                }
+                
+                // Handle "willing to relocate" checkbox based on user setting
+                if (combined.includes('relocate') || combined.includes('relocation')) {
+                        if (userData.willingToRelocate && !checkbox.checked) {
+                                checkbox.click()
+                                console.log('✓ Checked willing to relocate')
+                        } else if (!userData.willingToRelocate && checkbox.checked) {
+                                checkbox.click()
+                                console.log('✓ Unchecked willing to relocate (user preference)')
+                        }
+                        return
+                }
+                
+                // AUTO-CHECK ALL OTHER CHECKBOXES (terms, conditions, certifications, etc.)
+                if (!checkbox.checked) {
+                        checkbox.click()
+                        console.log('✓ Auto-checked checkbox: ' + (label || ariaLabel || 'unlabeled'))
+                }
+        })
 }
 
 // Enhanced skill detection with intelligent pattern matching

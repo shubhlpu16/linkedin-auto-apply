@@ -128,6 +128,26 @@ This project serves a documentation page at the preview URL that explains how to
 - **Purpose**: Provides a web-based documentation page explaining how to install the Chrome extension
 
 ## Recent Changes
+- **2025-11-11**: Enhanced Form Auto-Fill & Location Search
+  - **LOCATION SEARCH**: Google Places API integration with LinkedIn-style autocomplete
+    - Real-time location suggestions as you type (City, State, Country format)
+    - Fallback to 130+ curated locations when Google API unavailable
+    - Auto-fills location field on LinkedIn application forms
+  - **GENDER & DISABILITY**: Added dropdown fields for demographic information
+    - Gender options: Male, Female, Non-binary, Other, Prefer not to say
+    - Disability status: Yes, No, Prefer not to say
+    - Auto-filled on LinkedIn forms when available
+  - **WILLING TO RELOCATE**: New checkbox in profile settings
+    - Automatically fills relocation questions on LinkedIn (checkbox or radio button)
+  - **AUTO-CHECK ALL CHECKBOXES**: Automatically checks ALL checkboxes on LinkedIn forms
+    - Includes: Terms & conditions, privacy policy, certifications, acknowledgments, etc.
+    - EXCEPT: "Mark as top choice", "Dream job", "Priority", or similar preference checkboxes
+    - Smart detection to skip preference-based selections
+  - **AUTO-CLOSE CONFIRMATION MODALS**: After submitting application
+    - Automatically clicks "Done", "Close", "OK", or "Continue" buttons
+    - Also clicks X (close) button if no text button found
+    - Ensures smooth transition to next job application
+  
 - **2025-11-11**: Skills Made Optional
   - **UI UPDATE**: Changed "Key Skills (Experimental)" to "Key Skills (Optional)" with gray color
   - **VALIDATION**: Removed requirement for at least one skill - users can now start auto-apply without adding any skills

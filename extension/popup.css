@@ -783,3 +783,73 @@ textarea::placeholder {
         padding: 6px 12px;
         font-size: 0.85rem;
 }
+
+.location-field {
+        position: relative;
+}
+
+.location-autocomplete {
+        position: relative;
+        width: 100%;
+}
+
+.location-dropdown {
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        max-height: 280px;
+        overflow-y: auto;
+        background: rgba(15, 23, 42, 0.98);
+        border: 1px solid rgba(99, 102, 241, 0.3);
+        border-radius: var(--radius-sm);
+        margin-top: 4px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(99, 102, 241, 0.1);
+        z-index: 1000;
+        backdrop-filter: blur(12px);
+}
+
+.location-dropdown.active {
+        display: block;
+}
+
+.location-option {
+        padding: 10px 12px;
+        cursor: pointer;
+        color: var(--text);
+        font-size: 0.9rem;
+        transition: background 0.15s ease;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+}
+
+.location-option:last-child {
+        border-bottom: none;
+}
+
+.location-option:hover,
+.location-option.highlighted {
+        background: rgba(99, 102, 241, 0.12);
+}
+
+.location-option.selected {
+        background: rgba(99, 102, 241, 0.2);
+}
+
+.location-dropdown::-webkit-scrollbar {
+        width: 8px;
+}
+
+.location-dropdown::-webkit-scrollbar-track {
+        background: rgba(15, 23, 42, 0.3);
+        border-radius: 4px;
+}
+
+.location-dropdown::-webkit-scrollbar-thumb {
+        background: rgba(99, 102, 241, 0.3);
+        border-radius: 4px;
+}
+
+.location-dropdown::-webkit-scrollbar-thumb:hover {
+        background: rgba(99, 102, 241, 0.5);
+}

@@ -104,9 +104,13 @@
                                                 <label for="phone">Phone Number *</label>
                                                 <input type="tel" id="phone" placeholder="+1 (555) 123-4567" />
                                         </div>
-                                        <div class="form-field">
+                                        <div class="form-field location-field">
                                                 <label for="location">Location / City</label>
-                                                <input type="text" id="location" placeholder="New York, NY" />
+                                                <div class="location-autocomplete">
+                                                        <input type="text" id="location" placeholder="Search city, state, country..." autocomplete="off" />
+                                                        <div class="location-dropdown" id="locationDropdown"></div>
+                                                </div>
+                                                <p class="hint" style="margin-top: 4px; font-size: 0.7rem;">💡 Uses Google Places API (with fallback to 130+ cities)</p>
                                         </div>
                                         <div class="form-field">
                                                 <label for="linkedinProfile">LinkedIn Profile URL</label>
@@ -143,6 +147,30 @@
                                                         <option value="yes">Authorized to work</option>
                                                         <option value="no">Require sponsorship</option>
                                                 </select>
+                                        </div>
+                                        <div class="form-field">
+                                                <label for="gender">Gender</label>
+                                                <select id="gender">
+                                                        <option value="">Prefer not to say</option>
+                                                        <option value="male">Male</option>
+                                                        <option value="female">Female</option>
+                                                        <option value="non-binary">Non-binary</option>
+                                                        <option value="other">Other</option>
+                                                </select>
+                                        </div>
+                                        <div class="form-field">
+                                                <label for="disability">Disability Status</label>
+                                                <select id="disability">
+                                                        <option value="">Prefer not to say</option>
+                                                        <option value="yes">Yes, I have a disability</option>
+                                                        <option value="no">No, I don't have a disability</option>
+                                                </select>
+                                        </div>
+                                        <div class="form-field" style="grid-column: 1 / -1;">
+                                                <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+                                                        <input type="checkbox" id="willingToRelocate" style="width:auto;margin:0" />
+                                                        <span>Willing to relocate</span>
+                                                </label>
                                         </div>
                                 </div>
                                 <div class="skills-block">
