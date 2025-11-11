@@ -80,6 +80,13 @@ This project serves a documentation page at the preview URL that explains how to
 - **Purpose**: Provides a web-based documentation page explaining how to install the Chrome extension
 
 ## Recent Changes
+- **2025-11-11**: CRITICAL FIX: Job Status Marking Bug
+  - **BUG FIX: Incorrect job marked on failure**: Fixed critical bug where if a job failed, the extension would correctly move to the next job but incorrectly mark the previous job's status
+  - **ROOT CAUSE**: currentJobIndex was being incremented BEFORE job processing completed, causing potential race conditions
+  - **SOLUTION**: Created advanceAndContinue() helper function that ensures index only advances AFTER all status marking and history saving operations complete
+  - **IMPACT**: Now when any job fails, the correct job card is marked as failed in the UI and saved with the correct status in history
+  - **VERIFICATION**: All job processing paths (success, failure, skip, timeout, etc.) now properly advance the index after completion
+
 - **2025-11-10**: Fixed Easy Apply Detection & Job Filtering
   - **CRITICAL FIX: Easy Apply detection too strict**: Now accepts "Apply" buttons that aren't "Applied" status
   - **CRITICAL FIX: Job filtering**: Removed overly aggressive filters (promoted jobs, expired text checks)

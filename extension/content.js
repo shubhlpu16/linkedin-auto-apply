@@ -322,6 +322,12 @@ function showNextJobCountdown(seconds = 30) {
         })
 }
 
+// Helper to advance to next job and continue processing
+async function advanceAndContinue() {
+        currentJobIndex++
+        return await processNextJob()
+}
+
 async function processNextJob() {
         if (!isRunning) return console.log('⏹️ Process stopped')
 
@@ -374,14 +380,13 @@ async function processNextJob() {
         
         if (processedJobs.has(jobId)) {
                 console.log(`⏭️ Job ${jobId} already processed, moving to next`)
-                currentJobIndex++
                 if (!isRunning) return
                 await randomDelay(200, 500)
-                return await processNextJob()
+                return await advanceAndContinue()
         }
         
-        // Valid job found - increment index for next iteration
-        currentJobIndex++
+        // NOTE: Do NOT increment currentJobIndex here - we increment AFTER job processing
+        // completes to ensure all status marking uses the correct job card
 
         // Track attempts per job and avoid infinite retries
         const attempts = jobAttempts.get(jobId) || 0
@@ -398,7 +403,7 @@ async function processNextJob() {
                         const choice = await showNextJobCountdown(10)
                         console.log('Next-job countdown result:', choice)
                 } catch (e) { console.debug('countdown failed', e) }
-                return await processNextJob()
+                return await advanceAndContinue()
         }
         jobAttempts.set(jobId, attempts + 1)
 
@@ -434,7 +439,7 @@ async function processNextJob() {
                         const choice = await showNextJobCountdown(10)
                         console.log('Next-job countdown result:', choice)
                 } catch (e) { console.debug('countdown failed', e) }
-                return await processNextJob()
+                return await advanceAndContinue()
         }
 
         // Skip if job is already applied
@@ -452,7 +457,7 @@ async function processNextJob() {
                         const choice = await showNextJobCountdown(10)
                         console.log('Next-job countdown result:', choice)
                 } catch (e) { console.debug('countdown failed', e) }
-                return await processNextJob()
+                return await advanceAndContinue()
         }
 
         // Wait for detail pane to load, then find Easy Apply button GLOBALLY
@@ -472,7 +477,7 @@ async function processNextJob() {
                         const choice = await showNextJobCountdown(10)
                         console.log('Next-job countdown result:', choice)
                 } catch (e) { console.debug('countdown failed', e) }
-                return await processNextJob()
+                return await advanceAndContinue()
         }
 
         // Found Easy Apply - increment counter and show progress
@@ -505,7 +510,7 @@ async function processNextJob() {
                         const choice = await showNextJobCountdown(10)
                         console.log('Next-job countdown result:', choice)
                 } catch (e) { console.debug('countdown failed', e) }
-                return await processNextJob()
+                return await advanceAndContinue()
         }
 
         const result = await fillApplicationForm()
@@ -557,7 +562,7 @@ async function processNextJob() {
                 console.log('Next-job countdown result:', choice)
         } catch (e) { console.debug('countdown failed', e) }
         
-        await processNextJob()
+        await advanceAndContinue()
 }
 
 // After submit/modal-close, do extra checks to robustly detect a successful apply.
