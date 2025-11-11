@@ -62,6 +62,33 @@ This project serves a documentation page at the preview URL that explains how to
 4. Navigate to linkedin.com/jobs
 5. Start the auto-apply process
 
+## How to Test Enhanced Detection
+
+### Testing Already Applied Detection:
+1. **Reload the extension** in Chrome (chrome://extensions → click refresh icon on the extension)
+2. Go to LinkedIn jobs and find a job you've already applied to
+3. Open Chrome DevTools (F12) and go to the Console tab
+4. Start the auto-apply process
+5. **What to look for:**
+   - Console should show: `✓ Already applied detected in job card footer` (if "Applied" shown in card)
+   - Or: `✓ Already applied detected in job details pane` (if "Applied X time ago" shown in details)
+   - The job should be skipped with status "already_applied" in history
+
+### Testing Easy Apply Detection:
+1. Find a job listing that shows "Easy Apply" in the footer (look for "Viewed · Promoted · Easy Apply")
+2. Look at console logs when the extension processes this job
+3. **What to look for:**
+   - Console should show: `✓ Easy Apply indicator found in job card footer`
+   - Or: `✓ Easy Apply button found via #jobs-apply-button (MOST RELIABLE)` when details pane loads
+
+### Testing Failed Job Status Fix:
+1. Find a job that will fail (e.g., requires additional info the extension can't fill)
+2. Let it fail and move to next job
+3. **What to verify:**
+   - The FAILED job card should show "Failed" status badge (not the previous or next job)
+   - Check History tab - the failed job should be saved with status "failed"
+   - The next job should process normally
+
 ## Files Structure
 - `extension/` - Chrome extension folder (load this in Chrome)
   - `manifest.json` - Extension configuration (Manifest V3)
@@ -80,6 +107,14 @@ This project serves a documentation page at the preview URL that explains how to
 - **Purpose**: Provides a web-based documentation page explaining how to install the Chrome extension
 
 ## Recent Changes
+- **2025-11-11**: Enhanced Detection - Job Card Footer & Details Pane
+  - **DETECTION: Already Applied from job card footer**: Now detects "Applied" status shown directly in job card footer (below company/location)
+  - **DETECTION: Already Applied from details pane**: Enhanced pattern matching for "Applied X time ago" and "Applied on..." formats
+  - **DETECTION: Easy Apply in job card footer**: New helper function checks job card footer for "Easy Apply" indicators (e.g., "Viewed · Promoted · Easy Apply")
+  - **DETECTION: Multiple sources**: Extension now checks BOTH job card footer AND job details pane for more accurate status detection
+  - **LOGGING: Enhanced feedback**: Added detailed console logging showing where each status was detected (footer vs details pane)
+  - **TESTING**: See "How to Test" section below for validation steps
+
 - **2025-11-11**: CRITICAL FIX: Job Status Marking Bug
   - **BUG FIX: Incorrect job marked on failure**: Fixed critical bug where if a job failed, the extension would correctly move to the next job but incorrectly mark the previous job's status
   - **ROOT CAUSE**: currentJobIndex was being incremented BEFORE job processing completed, causing potential race conditions

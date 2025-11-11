@@ -198,6 +198,49 @@ function findEasyApplyButton() {
         return null
 }
 
+// Helper function to check if job card footer indicates Easy Apply availability
+function hasEasyApplyInFooter(jobCard) {
+        if (!jobCard) return false
+        
+        try {
+                // Check job card footer for "Easy Apply" indicator
+                const footerSelectors = [
+                        '.job-card-container__footer-item',
+                        '.job-card-list__footer',
+                        '.job-card-container__footer-wrapper',
+                        '.job-card-container__footer',
+                        '.artdeco-entity-lockup__caption'
+                ]
+                
+                for (const selector of footerSelectors) {
+                        const footerEl = jobCard.querySelector(selector)
+                        if (footerEl) {
+                                const footerText = (footerEl.textContent || '').toLowerCase()
+                                // Look for "Easy Apply" in patterns like "Viewed · Promoted · Easy Apply"
+                                if (footerText.includes('easy apply')) {
+                                        console.log('✓ Easy Apply indicator found in job card footer')
+                                        return true
+                                }
+                        }
+                }
+                
+                // Also check for LinkedIn icon with Easy Apply text
+                const easyApplyIcons = jobCard.querySelectorAll('[data-test-icon="linkedin-logo-compact"], .job-card-container__footer-item')
+                for (const icon of easyApplyIcons) {
+                        const parent = icon.parentElement || icon
+                        const text = (parent.textContent || '').toLowerCase()
+                        if (text.includes('easy apply')) {
+                                console.log('✓ Easy Apply indicator found near LinkedIn icon in footer')
+                                return true
+                        }
+                }
+        } catch (e) {
+                console.debug('hasEasyApplyInFooter error', e)
+        }
+        
+        return false
+}
+
 // Start processing helpers: collect job cards and iterate sequentially
 async function startProcessing() {
         console.log('🚀 Starting auto-apply...')
@@ -667,34 +710,64 @@ function isAlreadyApplied(jobCard) {
                 // MOST RELIABLE: Check for "See application" link - definitive proof of already applied
                 const seeApplicationLink = document.getElementById('jobs-apply-see-application-link')
                 if (seeApplicationLink) {
-                        console.log('✓ Already applied detected via #jobs-apply-see-application-link')
+                        console.log('✓ Already applied detected via #jobs-apply-see-application-link (job details)')
                         return true
                 }
                 
-                const text = (jobCard.innerText || '').toLowerCase()
-                
-                // Check job card text
-                if (text.includes('applied') || 
-                    text.includes('application submitted') ||
-                    text.includes('no longer') ||
-                    text.includes('in progress')) {
-                        return true
-                }
-                
-                // Check detail pane for applied status
-                const detailPane = document.querySelector('.jobs-unified-top-card, .jobs-details__main-content')
+                // Check job details pane for "Applied X time ago" pattern
+                const detailPane = document.querySelector('.jobs-unified-top-card, .jobs-details__main-content, .jobs-details')
                 if (detailPane) {
                         const detailText = (detailPane.innerText || '').toLowerCase()
-                        if (detailText.includes('applied') || 
+                        
+                        // Pattern: "Applied 45 minutes ago" or "Applied on ..."
+                        if (detailText.match(/applied\s+(\d+\s+)?(minute|hour|day|week|month)s?\s+ago/i) ||
+                            detailText.match(/applied\s+on\s+/i) ||
                             detailText.includes('application sent') ||
-                            detailText.includes('application submitted')) {
+                            detailText.includes('application submitted') ||
+                            detailText.includes('see application')) {
+                                console.log('✓ Already applied detected in job details pane')
+                                return true
+                        }
+                }
+                
+                // Check job card footer for "Applied" status (appears below location/company)
+                if (jobCard) {
+                        // Check for footer elements that contain "Applied"
+                        const footerSelectors = [
+                                '.job-card-container__footer-item',
+                                '.job-card-list__footer',
+                                '.job-card-container__footer-wrapper',
+                                '.artdeco-entity-lockup__caption',
+                                '.job-card-container__metadata-item'
+                        ]
+                        
+                        for (const selector of footerSelectors) {
+                                const footerEl = jobCard.querySelector(selector)
+                                if (footerEl) {
+                                        const footerText = (footerEl.textContent || '').trim().toLowerCase()
+                                        if (footerText === 'applied' || footerText.startsWith('applied ')) {
+                                                console.log('✓ Already applied detected in job card footer:', footerText)
+                                                return true
+                                        }
+                                }
+                        }
+                        
+                        // Check all job card text as fallback
+                        const cardText = (jobCard.innerText || '').toLowerCase()
+                        if (cardText.includes('application submitted') ||
+                            cardText.includes('no longer accepting') ||
+                            cardText.includes('application in progress')) {
+                                console.log('✓ Already applied detected in job card text')
                                 return true
                         }
                 }
                 
                 // Check for "Applied" button state
-                const appliedBtn = document.querySelector('button[aria-label*="Applied"]')
-                if (appliedBtn) return true
+                const appliedBtn = document.querySelector('button[aria-label*="Applied"], .jobs-apply-button--applied')
+                if (appliedBtn) {
+                        console.log('✓ Already applied detected via Applied button')
+                        return true
+                }
                 
                 return false
         } catch (e) {
