@@ -791,11 +791,15 @@ textarea::placeholder {
 .location-autocomplete {
         position: relative;
         width: 100%;
+        input {
+                        width: 100%;
+                }
 }
 
 .location-dropdown {
         display: none;
         position: absolute;
+        width: 100%;
         top: 100%;
         left: 0;
         right: 0;
