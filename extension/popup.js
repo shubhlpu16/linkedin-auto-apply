@@ -353,12 +353,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         }
                         return false
                 }
-                if (!data.skills || !data.skills.length) {
-                        if (options.showAlert) {
-                                alert('⚠️ Please add at least one skill before starting auto apply.')
-                        }
-                        return false
-                }
+                // Skills are now optional - extension will skip skill questions if none provided
                 return true
         }
 

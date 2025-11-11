@@ -64,6 +64,27 @@ This project serves a documentation page at the preview URL that explains how to
 
 ## How to Test Enhanced Detection
 
+### Testing Skill Question Detection & Auto-Fill:
+1. **Setup your skills** in the extension popup:
+   - Add skills like: React (5 years), Python (3 years), AWS (2 years)
+   - Make sure to set years of experience for each skill
+2. **Find a job** with skill-related questions in the application form
+3. **Open DevTools** (F12) → Console tab
+4. **Start auto-apply** and watch the console
+5. **What to look for:**
+   - `✓ Detected years question for "React": filling "5" years`
+   - `✓ Detected proficiency question for "Python": selecting "Intermediate" (3 years)`
+   - `✓ Detected yes/no question for "AWS": filling "Yes"`
+   - `✓ Detected radio button for "Docker": selected "Yes"`
+   - `✅ Filled 4 skill-related fields`
+6. **Verify in form**: Open the application modal and check that fields are filled correctly
+
+**Common Question Types Detected:**
+- "How many years of [skill] experience do you have?" → Fills number from your profile
+- "What is your [skill] proficiency level?" → Selects: Beginner/Intermediate/Advanced/Expert
+- "Do you have experience with [skill]?" → Selects: Yes/No
+- "Are you familiar with [skill]?" → Selects: Yes/No
+
 ### Testing Already Applied Detection:
 1. **Reload the extension** in Chrome (chrome://extensions → click refresh icon on the extension)
 2. Go to LinkedIn jobs and find a job you've already applied to
@@ -107,6 +128,36 @@ This project serves a documentation page at the preview URL that explains how to
 - **Purpose**: Provides a web-based documentation page explaining how to install the Chrome extension
 
 ## Recent Changes
+- **2025-11-11**: Skills Made Optional
+  - **UI UPDATE**: Changed "Key Skills (Experimental)" to "Key Skills (Optional)" with gray color
+  - **VALIDATION**: Removed requirement for at least one skill - users can now start auto-apply without adding any skills
+  - **BEHAVIOR**: Extension will skip skill-related questions if no skills are configured
+  - **HINT TEXT**: Updated to clearly explain skills are optional and show example use case
+  - **BENEFIT**: Users who don't want to deal with skill questions can now use the extension with just basic info (name, email, phone)
+
+- **2025-11-11**: Intelligent Skill Question Detection & Auto-Fill
+  - **SKILL DETECTION: Question Type Recognition**: Automatically detects different types of skill questions:
+    - **Years of Experience**: "How many years of React experience do you have?"
+    - **Proficiency Level**: "What is your Python proficiency level?" (Beginner/Intermediate/Advanced/Expert)
+    - **Yes/No Questions**: "Do you have experience with AWS?" or "Are you familiar with Docker?"
+    - **Skill Presence**: "Do you have knowledge of Kubernetes?"
+  - **SMART MATCHING: Fuzzy Skill Name Extraction**: Intelligently matches skills even with variations:
+    - **Whole-word matching**: Prevents "Java" from matching "JavaScript" (strict word boundaries)
+    - **Short skill support**: Handles 2-3 character skills like "Go", "R", "C#" with exact matching
+    - **Variation detection**: Matches "React" in "ReactJS" (prefix/suffix with max 2 char difference)
+    - **Similarity scoring**: Uses Levenshtein distance for 80%+ similar matches
+    - **Safe matching**: Multiple strategies prevent false positives while maximizing correct fills
+  - **AUTO-FILL: Proficiency Levels**: Maps years of experience to proficiency:
+    - < 1 year → Beginner
+    - 1-3 years → Intermediate
+    - 3-7 years → Advanced
+    - 7+ years → Expert
+  - **LOGGING: Detailed Feedback**: Shows exactly what was detected and filled:
+    - `✓ Detected years question for "React": filling "5" years`
+    - `✓ Detected proficiency question for "Python": selecting "Advanced" (5 years)`
+    - `✅ Filled 8 skill-related fields`
+  - **TESTING**: See enhanced testing section below
+
 - **2025-11-11**: Enhanced Detection - Job Card Footer & Details Pane
   - **DETECTION: Already Applied from job card footer**: Now detects "Applied" status shown directly in job card footer (below company/location)
   - **DETECTION: Already Applied from details pane**: Enhanced pattern matching for "Applied X time ago" and "Applied on..." formats

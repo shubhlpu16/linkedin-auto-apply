@@ -1118,69 +1118,260 @@ function fillRadioButtons(container) {
         }
 }
 
+// Enhanced skill detection with intelligent pattern matching
+function detectSkillQuestionType(label, placeholder = '') {
+        const combined = (label + ' ' + placeholder).toLowerCase()
+        
+        // Type 1: Years of experience questions
+        if (combined.match(/how many years|years of experience|years.*experience|experience.*years/i)) {
+                return { type: 'years', pattern: 'years_experience' }
+        }
+        
+        // Type 2: Proficiency level questions
+        if (combined.match(/proficiency|level|expertise|rating|how would you rate/i)) {
+                return { type: 'proficiency', pattern: 'skill_level' }
+        }
+        
+        // Type 3: Yes/No questions (Do you have X skill?)
+        if (combined.match(/do you (have|know)|are you (familiar|proficient)|can you/i)) {
+                return { type: 'boolean', pattern: 'yes_no' }
+        }
+        
+        // Type 4: Skill presence check
+        if (combined.match(/experience (with|in)|familiar with|knowledge of/i)) {
+                return { type: 'boolean', pattern: 'has_skill' }
+        }
+        
+        return { type: 'unknown', pattern: null }
+}
+
+// Fuzzy match skill name from question with strict word boundary checking
+function extractSkillFromLabel(label, skillMap) {
+        const labelLower = label.toLowerCase()
+        
+        // Helper: Check if word exists with word boundaries
+        const hasWholeWord = (text, word) => {
+                const regex = new RegExp(`\\b${word}\\b`, 'i')
+                return regex.test(text)
+        }
+        
+        // Helper: Calculate similarity score (0-1)
+        const similarity = (a, b) => {
+                if (a === b) return 1.0
+                const longer = a.length > b.length ? a : b
+                const shorter = a.length > b.length ? b : a
+                if (longer.length === 0) return 0
+                return (longer.length - editDistance(longer, shorter)) / longer.length
+        }
+        
+        // Simple Levenshtein distance for similarity
+        const editDistance = (a, b) => {
+                const matrix = Array(b.length + 1).fill(null).map(() => Array(a.length + 1).fill(null))
+                for (let i = 0; i <= a.length; i++) matrix[0][i] = i
+                for (let j = 0; j <= b.length; j++) matrix[j][0] = j
+                for (let j = 1; j <= b.length; j++) {
+                        for (let i = 1; i <= a.length; i++) {
+                                matrix[j][i] = b[j - 1] === a[i - 1]
+                                        ? matrix[j - 1][i - 1]
+                                        : Math.min(matrix[j - 1][i - 1] + 1, matrix[j][i - 1] + 1, matrix[j - 1][i] + 1)
+                        }
+                }
+                return matrix[b.length][a.length]
+        }
+        
+        // Strategy 1: Exact whole-word match (highest priority)
+        for (const skillName of skillMap.keys()) {
+                if (hasWholeWord(labelLower, skillName)) {
+                        console.log(`✓ Exact match: found "${skillName}" in question`)
+                        return skillName
+                }
+        }
+        
+        // Strategy 2: Handle short skills (≤3 chars) separately with exact match only
+        for (const skillName of skillMap.keys()) {
+                if (skillName.length <= 3) {
+                        // For short skills like "Go", "R", "C#", require exact whole word
+                        if (hasWholeWord(labelLower, skillName)) {
+                                console.log(`✓ Short skill exact match: found "${skillName}"`)
+                                return skillName
+                        }
+                }
+        }
+        
+        // Strategy 3: Check for common variations (e.g., "react" in "reactjs", "react.js")
+        const labelWords = labelLower.split(/[\s\-_.,;:()\[\]{}]+/).filter(w => w.length >= 2)
+        for (const skillName of skillMap.keys()) {
+                if (skillName.length <= 3) continue // Already handled short skills
+                
+                // Check if label contains skillName as a prefix/suffix (e.g., "reactjs" contains "react")
+                for (const word of labelWords) {
+                        if (word.startsWith(skillName) || word.endsWith(skillName)) {
+                                if (word.length - skillName.length <= 2) { // Max 2 char difference
+                                        console.log(`✓ Variation match: found "${skillName}" in "${word}"`)
+                                        return skillName
+                                }
+                        }
+                }
+        }
+        
+        // Strategy 4: High similarity match (≥80% similar)
+        let bestMatch = null
+        let bestScore = 0
+        
+        for (const skillName of skillMap.keys()) {
+                if (skillName.length <= 3) continue // Already handled
+                
+                for (const word of labelWords) {
+                        if (word.length < 3) continue
+                        const score = similarity(skillName, word)
+                        if (score >= 0.8 && score > bestScore) {
+                                bestScore = score
+                                bestMatch = skillName
+                        }
+                }
+        }
+        
+        if (bestMatch) {
+                console.log(`✓ Similarity match: found "${bestMatch}" (${Math.round(bestScore * 100)}% similar)`)
+                return bestMatch
+        }
+        
+        return null
+}
+
 function fillSkillRelatedFields(container) {
         const entries = getSkillEntries()
-        if (!entries.length) return
+        if (!entries.length) {
+                console.log('📝 No skills configured, skipping skill field filling')
+                return
+        }
+        
         const skillMap = new Map()
         entries.forEach((entry) => {
                 if (!entry.name) return
                 skillMap.set(entry.name.toLowerCase(), entry)
         })
-        const years = userData.yearsExperience || '3'
+        
+        const defaultYears = userData.yearsExperience || '3'
         const yesLabels = ['yes', 'true', 'available', 'y']
+        let filledCount = 0
 
-        container
-                .querySelectorAll('input[type="text"], input[type="number"]')
-                .forEach((input) => {
-                        if (input.value) return
-                        const label = getFieldLabel(input).toLowerCase()
-                        const skill = [...skillMap.keys()].find((s) => label.includes(s))
-                        if (!skill) return
-                        const entry = skillMap.get(skill)
-                        const value = label.includes('year')
-                                ? entry.experience || years
-                                : entry.hasSkill === false
-                                        ? 'No'
-                                        : 'Yes'
+        // Fill text/number inputs (years of experience, etc)
+        container.querySelectorAll('input[type="text"], input[type="number"]').forEach((input) => {
+                if (input.value) return
+                
+                const label = getFieldLabel(input)
+                const placeholder = input.getAttribute('placeholder') || ''
+                const questionType = detectSkillQuestionType(label, placeholder)
+                const skillName = extractSkillFromLabel(label, skillMap)
+                
+                if (!skillName) return
+                
+                const entry = skillMap.get(skillName)
+                let value = null
+                
+                if (questionType.type === 'years') {
+                        value = entry.experience || defaultYears
+                        console.log(`✓ Detected years question for "${entry.name}": filling "${value}" years`)
+                } else if (questionType.type === 'boolean') {
+                        value = entry.hasSkill === false ? 'No' : 'Yes'
+                        console.log(`✓ Detected yes/no question for "${entry.name}": filling "${value}"`)
+                } else {
+                        // Default: if question mentions skill, assume years
+                        value = entry.experience || defaultYears
+                        console.log(`✓ Detected skill question for "${entry.name}": filling "${value}"`)
+                }
+                
+                if (value) {
                         setInputValue(input, value)
-                })
-
-        container.querySelectorAll('select').forEach((select) => {
-                if (select.value) return
-                const label = getFieldLabel(select).toLowerCase()
-                const skill = [...skillMap.keys()].find((s) => label.includes(s))
-                if (!skill) return
-                const entry = skillMap.get(skill)
-                const matchLabels = entry.hasSkill === false ? ['no', 'false'] : yesLabels
-                const opt = [...select.options].find((option) =>
-                        matchLabels.some((lbl) => option.textContent.toLowerCase().includes(lbl)),
-                )
-                if (opt) {
-                        select.value = opt.value
-                        select.dispatchEvent(new Event('change', { bubbles: true }))
+                        filledCount++
                 }
         })
 
+        // Fill select dropdowns (proficiency levels, yes/no, etc)
+        container.querySelectorAll('select').forEach((select) => {
+                if (select.value) return
+                
+                const label = getFieldLabel(select)
+                const questionType = detectSkillQuestionType(label)
+                const skillName = extractSkillFromLabel(label, skillMap)
+                
+                if (!skillName) return
+                
+                const entry = skillMap.get(skillName)
+                const options = [...select.options]
+                let selectedOption = null
+                
+                if (questionType.type === 'proficiency') {
+                        // Map years of experience to proficiency level
+                        const years = parseInt(entry.experience) || parseInt(defaultYears) || 3
+                        let targetLevel = 'intermediate'
+                        
+                        if (years < 1) targetLevel = 'beginner'
+                        else if (years >= 1 && years < 3) targetLevel = 'intermediate'
+                        else if (years >= 3 && years < 7) targetLevel = 'advanced'
+                        else targetLevel = 'expert'
+                        
+                        selectedOption = options.find(opt => 
+                                opt.textContent.toLowerCase().includes(targetLevel)
+                        )
+                        
+                        if (selectedOption) {
+                                console.log(`✓ Detected proficiency question for "${entry.name}": selecting "${selectedOption.textContent}" (${years} years)`)
+                        }
+                } else if (questionType.type === 'boolean' || questionType.type === 'unknown') {
+                        // Yes/No selection
+                        const matchLabels = entry.hasSkill === false ? ['no', 'false'] : yesLabels
+                        selectedOption = options.find((option) =>
+                                matchLabels.some((lbl) => option.textContent.toLowerCase().includes(lbl))
+                        )
+                        
+                        if (selectedOption) {
+                                console.log(`✓ Detected dropdown for "${entry.name}": selecting "${selectedOption.textContent}"`)
+                        }
+                }
+                
+                if (selectedOption) {
+                        select.value = selectedOption.value
+                        select.dispatchEvent(new Event('change', { bubbles: true }))
+                        filledCount++
+                }
+        })
+
+        // Fill radio buttons (yes/no for skills)
         const radios = container.querySelectorAll('input[type="radio"]')
         const groups = {}
         radios.forEach((r) => (groups[r.name] = [...(groups[r.name] || []), r]))
+        
         for (const group of Object.values(groups)) {
                 if (group.some((r) => r.checked)) continue
-                const label = getFieldLabel(group[0]).toLowerCase()
-                const skill = [...skillMap.keys()].find((s) => label.includes(s))
-                if (skill) {
-                        const entry = skillMap.get(skill)
-                        const yesRadio = group.find((r) => {
+                
+                const label = getFieldLabel(group[0])
+                const skillName = extractSkillFromLabel(label, skillMap)
+                
+                if (skillName) {
+                        const entry = skillMap.get(skillName)
+                        const matchLabels = entry.hasSkill === false ? ['no', 'false'] : yesLabels
+                        
+                        const targetRadio = group.find((r) => {
                                 const lbl = (
                                         r.getAttribute('aria-label') ||
                                         r.nextSibling?.textContent ||
                                         ''
                                 ).toLowerCase()
-                                const matchLabels = entry.hasSkill === false ? ['no', 'false'] : yesLabels
                                 return matchLabels.some((y) => lbl.includes(y))
                         })
-                        if (yesRadio) yesRadio.click()
+                        
+                        if (targetRadio) {
+                                targetRadio.click()
+                                console.log(`✓ Detected radio button for "${entry.name}": selected "${targetRadio.getAttribute('aria-label') || 'Yes'}"`)
+                                filledCount++
+                        }
                 }
+        }
+        
+        if (filledCount > 0) {
+                console.log(`✅ Filled ${filledCount} skill-related fields`)
         }
 }
 
