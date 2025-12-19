@@ -36,7 +36,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 })
 
 async function handlePlacePredictions(query) {
-        const GOOGLE_PLACES_API_KEY = 'AIzaSyDummyKeyForPlaceholder'
+        const GOOGLE_PLACES_API_KEY = 'AIzaSyA98qELfj5nJt8zO3TC9hyluUlwkrSEctw'
         
         try {
                 const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&types=(cities)&key=${GOOGLE_PLACES_API_KEY}`
